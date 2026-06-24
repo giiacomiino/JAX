@@ -3,10 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -31,43 +27,49 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <Card className="w-full max-w-md bg-slate-900 border-slate-800">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl text-white">JAX</CardTitle>
-          <p className="text-slate-400 text-sm">Life OS Personal</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <Label htmlFor="email" className="text-slate-300">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                className="bg-slate-800 border-slate-700 text-white"
-              />
-            </div>
-            <div>
-              <Label htmlFor="password" className="text-slate-300">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                className="bg-slate-800 border-slate-700 text-white"
-              />
-            </div>
-            {error && <p className="text-red-400 text-sm">{error}</p>}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? 'Entrando...' : 'Entrar'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-sm p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-display-lg font-bold text-primary">JAX</h1>
+          <p className="text-on-surface-variant text-label-md mt-1">Life OS Personal</p>
+        </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-label-md text-on-surface-variant mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-label-md text-on-surface-variant mb-1">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+            />
+          </div>
+          {error && <p className="text-error text-label-md">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-primary text-on-primary py-3 rounded-xl text-label-md font-bold hover:scale-[1.02] active:scale-95 transition-transform disabled:opacity-60"
+          >
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
