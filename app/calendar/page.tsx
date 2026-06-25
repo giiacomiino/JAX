@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths, parseISO
+  eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, parseISO
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { Task, Event, Project } from '@/types'
