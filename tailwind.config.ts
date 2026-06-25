@@ -9,15 +9,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: '#fcf8fb',
-        surface: '#fcf8fb',
-        'surface-dim': '#dcd9dc',
-        'surface-bright': '#fcf8fb',
+        background: '#e8eaf0',
+        surface: '#ffffff',
+        'surface-dim': '#c8cad0',
+        'surface-bright': '#ffffff',
         'surface-container-lowest': '#ffffff',
-        'surface-container-low': '#f6f3f5',
-        'surface-container': '#f0edef',
-        'surface-container-high': '#eae7ea',
-        'surface-container-highest': '#e4e2e4',
+        'surface-container-low': '#f4f5f7',
+        'surface-container': '#eceef2',
+        'surface-container-high': '#e2e4ea',
+        'surface-container-highest': '#d8dae0',
         'on-surface': '#1b1b1d',
         'on-surface-variant': '#414755',
         'inverse-surface': '#303032',
