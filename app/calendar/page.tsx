@@ -6,49 +6,50 @@ import {
   eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, parseISO
 } from 'date-fns'
 import { es } from 'date-fns/locale'
+import Link from 'next/link'
 import type { Task, Event, Project } from '@/types'
 
 interface ProjectedPayment {
-  id: string; title: string; date: string; amount: number
+  id: string; title: string; date: string; amount: number; minimum?: number
   type: 'card_payment' | 'debt_payment' | 'recurring_expense'
   status: string; color: string
 }
-
+interface GoogleEvent {
+  id: string; title: string; date: string; color: string
+  accountLabel: string; accountEmail: string; description?: string; location?: string
+}
 interface RawExpense { id: string; notes: string; amount: number; expense_date: string; payment_method?: string; category?: string; expense_category?: string; is_virtual?: boolean }
 interface RawIncome  { id: string; income_name: string; amount: number; income_date: string; is_virtual?: boolean; is_recurring?: boolean }
 
 interface CalendarItem {
   id: string
-  type: 'task' | 'event' | 'card_payment' | 'debt_payment' | 'recurring_expense'
-  title: string; date: string; color: string; done?: boolean; amount?: number
+  type: 'task' | 'event' | 'google_event' | 'card_payment' | 'debt_payment' | 'recurring_expense'
+  title: string; date: string; color: string; done?: boolean; amount?: number; minimum?: number
   projectId?: string; projectName?: string; pillarName?: string
+  accountLabel?: string; description?: string
 }
 
 interface PillarMap { [pillarId: string]: { name: string; color: string; projects: { [pid: string]: string } } }
 
-const TYPE_COLORS = { event: '#0891b2' }
+const LOCAL_EVENT_COLOR = '#0891b2'
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n ?? 0)
 
-// ─── Day popup ──────────────────────────────────────────────────────────────
+// ─── Day modal ───────────────────────────────────────────────────────────────
 function DayModal({ day, items, expenses, incomes, onClose }: {
-  day: Date
-  items: CalendarItem[]
-  expenses: RawExpense[]
-  incomes: RawIncome[]
-  onClose: () => void
+  day: Date; items: CalendarItem[]
+  expenses: RawExpense[]; incomes: RawIncome[]; onClose: () => void
 }) {
   const dayKey = format(day, 'yyyy-MM-dd')
   const dayExpenses = expenses.filter(e => (e.expense_date ?? '').startsWith(dayKey))
   const dayIncomes = incomes.filter(i => (i.income_date ?? '').startsWith(dayKey))
 
   const taskItems = items.filter(i => i.type === 'task')
-  const financeItems = items.filter(i => i.type !== 'task' && i.type !== 'event')
-  const eventItems = items.filter(i => i.type === 'event')
+  const eventItems = items.filter(i => i.type === 'event' || i.type === 'google_event')
+  const financeItems = items.filter(i => !['task', 'event', 'google_event'].includes(i.type))
 
-  // Group tasks by pillar > project
+  // Group tasks by pillar
   const tasksByPillar: Record<string, { pillarName: string; color: string; tasks: CalendarItem[] }> = {}
   for (const t of taskItems) {
     const key = t.pillarName ?? 'Sin pilar'
@@ -60,25 +61,20 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
   const totalExpense = dayExpenses.filter(e => !e.is_virtual).reduce((s, e) => s + (e.amount ?? 0), 0)
   const totalVirtual = [...dayExpenses.filter(e => e.is_virtual), ...dayIncomes.filter(i => i.is_virtual)].reduce((s, x) => s + (x.amount ?? 0), 0)
   const dayBalance = totalIncome - totalExpense
-
-  const isEmpty = taskItems.length === 0 && eventItems.length === 0 && financeItems.length === 0 && dayExpenses.length === 0 && dayIncomes.length === 0
+  const isEmpty = !taskItems.length && !eventItems.length && !financeItems.length && !dayExpenses.length && !dayIncomes.length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-      <div
-        className="relative bg-surface rounded-3xl border border-outline-variant zen-shadow w-full max-w-lg max-h-[80vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
+      <div className="relative bg-surface rounded-3xl border border-outline-variant zen-shadow w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-surface rounded-t-3xl border-b border-outline-variant px-6 py-4 flex items-center justify-between">
           <div>
-            <p className="text-label-sm text-on-surface-variant capitalize">{format(day, "EEEE", { locale: es })}</p>
+            <p className="text-label-sm text-on-surface-variant capitalize">{format(day, 'EEEE', { locale: es })}</p>
             <p className="font-display font-extrabold text-headline-md text-on-surface" style={{ letterSpacing: '-0.02em' }}>
               {format(day, "d 'de' MMMM", { locale: es })}
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container">
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
@@ -91,7 +87,7 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
             </div>
           )}
 
-          {/* Tareas por pilar/proyecto */}
+          {/* Tareas por pilar */}
           {taskItems.length > 0 && (
             <div className="space-y-3">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Tareas y pendientes</p>
@@ -120,48 +116,58 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
             </div>
           )}
 
-          {/* Eventos */}
+          {/* Eventos (locales + Google) */}
           {eventItems.length > 0 && (
             <div className="space-y-2">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Eventos</p>
               {eventItems.map(e => (
-                <div key={e.id} className="flex items-center gap-2 p-3 rounded-xl bg-cyan-50 border border-cyan-100">
-                  <span className="material-symbols-outlined text-[16px] text-cyan-600">event</span>
-                  <p className="text-label-md text-on-surface">{e.title}</p>
+                <div key={e.id} className="flex items-start gap-2 p-3 rounded-xl border" style={{ backgroundColor: e.color + '12', borderColor: e.color + '30' }}>
+                  <span className="material-symbols-outlined text-[15px] mt-0.5" style={{ color: e.color }}>
+                    {e.type === 'google_event' ? 'event_available' : 'event'}
+                  </span>
+                  <div>
+                    <p className="text-label-md text-on-surface">{e.title}</p>
+                    {e.accountLabel && <p className="text-label-sm text-on-surface-variant">{e.accountLabel}</p>}
+                    {e.description && <p className="text-label-sm text-on-surface-variant mt-0.5 line-clamp-2">{e.description}</p>}
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Pagos proyectados */}
+          {/* Compromisos financieros */}
           {financeItems.length > 0 && (
             <div className="space-y-2">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Compromisos financieros</p>
               {financeItems.map(p => (
-                <div key={p.id} className={`flex items-center justify-between p-3 rounded-xl border ${p.done ? 'opacity-50' : ''}`}
+                <div key={p.id} className={`p-3 rounded-xl border ${p.done ? 'opacity-50' : ''}`}
                   style={{ backgroundColor: p.color + '10', borderColor: p.color + '30' }}>
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[15px]" style={{ color: p.color }}>
-                      {p.type === 'card_payment' ? 'credit_card' : p.type === 'debt_payment' ? 'account_balance' : 'payments'}
-                    </span>
-                    <div>
-                      <p className="text-label-md text-on-surface">{p.title}</p>
-                      <p className="text-label-sm" style={{ color: p.color }}>
-                        {p.type === 'card_payment' ? 'Pago tarjeta' : p.type === 'debt_payment' ? 'Pago deuda' : 'Pago recurrente'}
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[15px]" style={{ color: p.color }}>
+                        {p.type === 'card_payment' ? 'credit_card' : p.type === 'debt_payment' ? 'account_balance' : 'payments'}
+                      </span>
+                      <div>
+                        <p className="text-label-md text-on-surface">{p.title}</p>
+                        <p className="text-label-sm" style={{ color: p.color }}>
+                          {p.type === 'card_payment' ? 'Saldo por corte' : p.type === 'debt_payment' ? 'Pago deuda' : 'Recurrente'}
+                        </p>
+                      </div>
                     </div>
+                    <p className="text-label-md font-bold" style={{ color: p.color }}>{fmt(p.amount ?? 0)}</p>
                   </div>
-                  <p className="text-label-md font-bold" style={{ color: p.color }}>-{fmt(p.amount ?? 0)}</p>
+                  {p.type === 'card_payment' && p.minimum != null && p.minimum > 0 && (
+                    <p className="text-label-sm text-amber-600 text-right mt-1">mín {fmt(p.minimum)}</p>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Movimientos del día */}
+          {/* Movimientos del día (FinWise) */}
           {(dayIncomes.length > 0 || dayExpenses.length > 0) && (
             <div className="space-y-2">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Movimientos del día</p>
-
               {dayIncomes.map(i => (
                 <div key={i.id} className={`flex items-center justify-between p-3 rounded-xl border ${i.is_virtual ? 'bg-amber-50 border-amber-100' : 'bg-green-50 border-green-100'}`}>
                   <div className="flex items-center gap-2">
@@ -178,7 +184,6 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
                   </p>
                 </div>
               ))}
-
               {dayExpenses.map(e => {
                 const virtual = e.is_virtual === true
                 const cat = e.category || e.expense_category || e.payment_method
@@ -199,11 +204,9 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
                   </div>
                 )
               })}
-
-              {/* Balance del día */}
               {(totalIncome > 0 || totalExpense > 0) && (
                 <div className="flex justify-between items-center pt-2 border-t border-outline-variant">
-                  <span className="text-label-sm text-on-surface-variant">Balance real del día</span>
+                  <span className="text-label-sm text-on-surface-variant">Balance real</span>
                   <span className={`text-label-md font-bold ${dayBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {dayBalance >= 0 ? '+' : ''}{fmt(dayBalance)}
                   </span>
@@ -211,7 +214,7 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
               )}
               {totalVirtual > 0 && (
                 <div className="flex justify-between items-center">
-                  <span className="text-label-sm text-on-surface-variant">Virtuales (no impactan liquidez)</span>
+                  <span className="text-label-sm text-on-surface-variant">Virtuales</span>
                   <span className="text-label-md font-semibold text-amber-600">±{fmt(totalVirtual)}</span>
                 </div>
               )}
@@ -231,6 +234,8 @@ export default function CalendarPage() {
   const [projected, setProjected] = useState<ProjectedPayment[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [pillars, setPillars] = useState<Array<{ id: string; name: string; color: string }>>([])
+  const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([])
+  const [googleAccounts, setGoogleAccounts] = useState<Array<{ id: string; label: string; color: string; email: string }>>([])
   const [rawExpenses, setRawExpenses] = useState<RawExpense[]>([])
   const [rawIncomes, setRawIncomes] = useState<RawIncome[]>([])
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
@@ -238,13 +243,15 @@ export default function CalendarPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/tasks').then(r => r.json()),
-      fetch('/api/events').then(r => r.json()),
-      fetch('/api/finanzas/projected').then(r => r.json()),
-      fetch('/api/projects').then(r => r.json()),
-      fetch('/api/pillars').then(r => r.json()),
-      fetch('/api/finanzas').then(r => r.json()),
-    ]).then(([t, e, proj, p, pil, fin]) => {
+      fetch('/api/tasks').then(r => r.json()).catch(() => []),
+      fetch('/api/events').then(r => r.json()).catch(() => []),
+      fetch('/api/finanzas/projected').then(r => r.json()).catch(() => []),
+      fetch('/api/projects').then(r => r.json()).catch(() => []),
+      fetch('/api/pillars').then(r => r.json()).catch(() => []),
+      fetch('/api/finanzas').then(r => r.json()).catch(() => ({})),
+      fetch('/api/google/accounts').then(r => r.json()).catch(() => []),
+      fetch('/api/google/events').then(r => r.json()).catch(() => []),
+    ]).then(([t, e, proj, p, pil, fin, gAccounts, gEvents]) => {
       setTasks(Array.isArray(t) ? t : [])
       setEvents(Array.isArray(e) ? e : [])
       setProjected(Array.isArray(proj) ? proj : [])
@@ -252,15 +259,13 @@ export default function CalendarPage() {
       setPillars(Array.isArray(pil) ? pil : [])
       setRawExpenses(Array.isArray(fin?.Expense) ? fin.Expense : [])
       setRawIncomes(Array.isArray(fin?.Income) ? fin.Income : [])
+      setGoogleAccounts(Array.isArray(gAccounts) ? gAccounts : [])
+      setGoogleEvents(Array.isArray(gEvents) ? gEvents : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
 
-  // Build lookup maps
-  const projectMap = useMemo(() =>
-    Object.fromEntries(projects.map(p => [p.id, p])),
-    [projects]
-  )
+  const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects])
 
   const pillarMap = useMemo((): PillarMap => {
     const map: PillarMap = {}
@@ -279,33 +284,38 @@ export default function CalendarPage() {
 
     for (const t of tasks) {
       if (!t.due_date) continue
-      const taskWithProject = t as Task & { project_id?: string }
-      const proj = taskWithProject.project_id ? projectMap[taskWithProject.project_id] : null
-      const projWithPillar = proj as (Project & { pillar_id?: string }) | null
-      const pillar = projWithPillar?.pillar_id ? pillarMap[projWithPillar.pillar_id] : null
-      const color = proj?.color ?? '#374151'
+      const tw = t as Task & { project_id?: string }
+      const proj = tw.project_id ? projectMap[tw.project_id] : null
+      const pw = proj as (Project & { pillar_id?: string }) | null
+      const pillar = pw?.pillar_id ? pillarMap[pw.pillar_id] : null
       items.push({
         id: t.id, type: 'task', title: t.title, date: t.due_date,
-        color, done: t.status === 'completed',
-        projectId: taskWithProject.project_id,
-        projectName: proj?.name,
+        color: proj?.color ?? '#374151', done: t.status === 'completed',
+        projectId: tw.project_id, projectName: proj?.name,
         pillarName: pillar?.name ?? (proj ? 'Sin pilar' : 'Sin proyecto'),
       })
     }
 
     for (const e of events) {
-      items.push({ id: e.id, type: 'event', title: e.title, date: e.starts_at.split('T')[0], color: TYPE_COLORS.event })
+      items.push({ id: e.id, type: 'event', title: e.title, date: e.starts_at.split('T')[0], color: LOCAL_EVENT_COLOR })
+    }
+
+    for (const g of googleEvents) {
+      items.push({
+        id: g.id, type: 'google_event', title: g.title, date: g.date,
+        color: g.color, accountLabel: g.accountLabel, description: g.description,
+      })
     }
 
     for (const p of projected) {
       items.push({
         id: p.id, type: p.type, title: p.title, date: p.date,
-        color: p.color, done: p.status === 'paid', amount: p.amount,
+        color: p.color, done: p.status === 'paid', amount: p.amount, minimum: p.minimum,
       })
     }
 
     return items
-  }, [tasks, events, projected, projectMap, pillarMap])
+  }, [tasks, events, googleEvents, projected, projectMap, pillarMap])
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 })
@@ -326,19 +336,29 @@ export default function CalendarPage() {
           <h1 className="font-display text-display-sm font-extrabold text-on-surface capitalize" style={{ letterSpacing: '-0.03em' }}>
             {format(currentDate, 'MMMM yyyy', { locale: es })}
           </h1>
-          <p className="text-label-md text-on-surface-variant mt-1">{allItems.length} eventos · click en un día para el desglose</p>
+          <p className="text-label-md text-on-surface-variant mt-1">
+            {allItems.length} eventos
+            {googleAccounts.length > 0 && ` · ${googleAccounts.length} cuenta(s) Google`}
+            {' · '}click en un día para desglose
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCurrentDate(new Date())}
-            className="px-3 py-2 rounded-xl text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container transition-colors">
-            Hoy
-          </button>
-          <button onClick={() => setCurrentDate(d => subMonths(d, 1))}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors">
+          {googleAccounts.length === 0 && (
+            <Link href="/settings" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-outline-variant text-label-sm text-on-surface-variant hover:bg-surface-container transition-colors">
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Conectar Google
+            </Link>
+          )}
+          <button onClick={() => setCurrentDate(new Date())} className="px-3 py-2 rounded-xl text-label-sm text-on-surface-variant border border-outline-variant hover:bg-surface-container transition-colors">Hoy</button>
+          <button onClick={() => setCurrentDate(d => subMonths(d, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors">
             <span className="material-symbols-outlined text-[20px]">chevron_left</span>
           </button>
-          <button onClick={() => setCurrentDate(d => addMonths(d, 1))}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors">
+          <button onClick={() => setCurrentDate(d => addMonths(d, 1))} className="w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container transition-colors">
             <span className="material-symbols-outlined text-[20px]">chevron_right</span>
           </button>
         </div>
@@ -352,21 +372,25 @@ export default function CalendarPage() {
             <span className="text-label-sm text-on-surface-variant">{p.name}</span>
           </div>
         ))}
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TYPE_COLORS.event }} /><span className="text-label-sm text-on-surface-variant">Eventos</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500" /><span className="text-label-sm text-on-surface-variant">Pagos</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: LOCAL_EVENT_COLOR }} /><span className="text-label-sm text-on-surface-variant">Eventos JAX</span></div>
+        {googleAccounts.map(a => (
+          <div key={a.id} className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: a.color }} />
+            <span className="text-label-sm text-on-surface-variant">{a.label}</span>
+          </div>
+        ))}
         <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-600" /><span className="text-label-sm text-on-surface-variant">Tarjetas</span></div>
         <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-violet-600" /><span className="text-label-sm text-on-surface-variant">Deudas</span></div>
       </div>
 
       <div className="flex gap-6">
-        {/* Calendario */}
+        {/* Grid */}
         <div className="flex-1 bg-surface rounded-3xl border border-outline-variant overflow-hidden zen-shadow">
           <div className="grid grid-cols-7 border-b border-outline-variant">
             {WEEKDAYS.map(d => (
               <div key={d} className="py-3 text-center text-label-sm font-semibold text-on-surface-variant">{d}</div>
             ))}
           </div>
-
           {loading ? (
             <div className="flex justify-center items-center h-96">
               <span className="material-symbols-outlined text-[32px] text-primary animate-spin">progress_activity</span>
@@ -379,12 +403,10 @@ export default function CalendarPage() {
                 const todayDay = isToday(day)
                 const visible = dayItems.slice(0, 3)
                 const overflow = dayItems.length - visible.length
-
                 return (
                   <button key={idx} onClick={() => setSelectedDay(day)}
                     className={`min-h-[96px] p-2 border-b border-r border-outline-variant text-left transition-colors hover:bg-primary/5 active:bg-primary/10 ${
-                      todayDay ? 'bg-secondary-container/30' :
-                      isCurrentMonth ? 'bg-surface' : 'bg-surface-container/40'
+                      todayDay ? 'bg-secondary-container/30' : isCurrentMonth ? 'bg-surface' : 'bg-surface-container/40'
                     }`}
                   >
                     <div className={`w-7 h-7 flex items-center justify-center rounded-full text-label-md mb-1 font-semibold ${
@@ -397,6 +419,7 @@ export default function CalendarPage() {
                         <div key={item.id}
                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight truncate ${item.done ? 'opacity-40' : ''}`}
                           style={{ backgroundColor: item.color + '20', color: item.color }}>
+                          {item.type === 'google_event' && <span className="material-symbols-outlined text-[9px]">event_available</span>}
                           {item.type === 'event' && <span className="material-symbols-outlined text-[9px]">event</span>}
                           {(item.type === 'card_payment' || item.type === 'debt_payment' || item.type === 'recurring_expense') && <span className="material-symbols-outlined text-[9px]">payments</span>}
                           <span className="truncate">{item.title}</span>
@@ -411,7 +434,7 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Panel lateral — próximos 7 días */}
+        {/* Panel lateral */}
         <div className="w-64 flex-shrink-0 space-y-3">
           <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow space-y-3">
             <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wide">Próximos 7 días</p>
@@ -421,7 +444,7 @@ export default function CalendarPage() {
               const upcoming = allItems.filter(i => {
                 try { const d = parseISO(i.date); return d >= today && d <= in7 && !i.done }
                 catch { return false }
-              }).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
+              }).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10)
               return upcoming.length === 0 ? (
                 <p className="text-label-sm text-on-surface-variant">Sin pendientes</p>
               ) : upcoming.map(item => (
@@ -436,14 +459,34 @@ export default function CalendarPage() {
             })()}
           </div>
 
-          <div className="bg-surface rounded-2xl border border-outline-variant p-4 text-center">
-            <span className="material-symbols-outlined text-[28px] text-outline-variant">touch_app</span>
-            <p className="text-label-sm text-on-surface-variant mt-1">Click en un día para ver el desglose completo</p>
-          </div>
+          {googleAccounts.length === 0 ? (
+            <Link href="/settings" className="block bg-surface rounded-2xl border border-dashed border-outline-variant p-4 text-center hover:bg-surface-container transition-colors">
+              <svg viewBox="0 0 24 24" className="w-6 h-6 mx-auto mb-1" fill="none">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              <p className="text-label-sm text-on-surface-variant">Conectar Google Calendar</p>
+            </Link>
+          ) : (
+            <div className="bg-surface rounded-2xl border border-outline-variant p-3 space-y-1">
+              <p className="text-label-sm font-semibold text-on-surface-variant px-1">Google conectado</p>
+              {googleAccounts.map(a => (
+                <div key={a.id} className="flex items-center gap-2 px-1 py-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: a.color }} />
+                  <p className="text-label-sm text-on-surface">{a.label}</p>
+                </div>
+              ))}
+              <Link href="/settings" className="flex items-center gap-1 px-1 text-label-sm text-on-surface-variant hover:text-primary transition-colors">
+                <span className="material-symbols-outlined text-[13px]">settings</span>
+                Administrar
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Day modal */}
       {selectedDay && (
         <DayModal
           day={selectedDay}

@@ -4,7 +4,7 @@ import { addMonths, format, startOfDay } from 'date-fns'
 
 interface CreditCard {
   id: string; card_alias: string; bank_name: string
-  minimum_payment: number; payment_due_date: number; current_balance: number
+  minimum_payment: number; payment_due_date: number; current_balance: number; cutoff_date?: number
 }
 interface Debt {
   id: string; debt_name: string; monthly_payment: number; payment_day: number
@@ -22,7 +22,7 @@ export async function GET() {
     const schedules = (raw.PaymentSchedule ?? []) as PaymentSchedule[]
 
     const projected: Array<{
-      id: string; title: string; date: string; amount: number
+      id: string; title: string; date: string; amount: number; minimum?: number
       type: 'card_payment' | 'debt_payment' | 'recurring_expense'
       status: string; color: string
     }> = []
@@ -39,9 +39,10 @@ export async function GET() {
         if (payDate < today || payDate > horizon) continue
         projected.push({
           id: `card-${card.id}-${m}`,
-          title: `💳 ${card.card_alias || card.bank_name} — mínimo`,
+          title: `💳 ${card.card_alias || card.bank_name}`,
           date: format(payDate, 'yyyy-MM-dd'),
-          amount: card.minimum_payment ?? 0,
+          amount: card.current_balance ?? 0,
+          minimum: card.minimum_payment ?? 0,
           type: 'card_payment',
           status: 'pending',
           color: '#dc2626',

@@ -13,6 +13,7 @@ const navItems = [
   { href: '/portfolio', label: 'Portfolio', icon: 'trending_up' },
   { href: '/pillars', label: 'Pilares', icon: 'workspaces' },
   { href: '/calendar', label: 'Calendario', icon: 'calendar_month' },
+  { href: '/settings', label: 'Configuración', icon: 'settings' },
 ]
 
 export function Nav() {
