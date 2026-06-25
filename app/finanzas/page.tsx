@@ -106,6 +106,7 @@ export default function FinanzasPage() {
   const [tab, setTab] = useState<Tab>('resumen')
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'paid' | 'recurring'>('all')
+  const [includeVirtual, setIncludeVirtual] = useState(false)
 
   useEffect(() => {
     fetch('/api/finanzas')
@@ -153,14 +154,15 @@ export default function FinanzasPage() {
     catch { return false }
   }
 
-  const monthExpenses = useMemo(() =>
-    expenses.filter(e => inMonth(e.expense_date || e.accounting_month?.split('-').slice(0, 2).join('-') + '-01')),
-    [expenses, selectedMonth] // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const monthIncomes = useMemo(() =>
-    incomes.filter(i => inMonth(i.income_date)),
-    [incomes, selectedMonth] // eslint-disable-line react-hooks/exhaustive-deps
-  )
+  const monthExpenses = useMemo(() => {
+    const base = expenses.filter(e => inMonth(e.expense_date || e.accounting_month?.split('-').slice(0, 2).join('-') + '-01'))
+    return includeVirtual ? base : base.filter(e => !isVirtual(e))
+  }, [expenses, selectedMonth, includeVirtual]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const monthIncomes = useMemo(() => {
+    const base = incomes.filter(i => inMonth(i.income_date))
+    return includeVirtual ? base : base.filter(i => !i.is_virtual)
+  }, [incomes, selectedMonth, includeVirtual]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalMonthExpenses = monthExpenses.reduce((s, e) => s + (e.amount ?? 0), 0)
   const totalMonthIncomes = monthIncomes.reduce((s, i) => s + (i.amount ?? 0), 0)
@@ -171,13 +173,15 @@ export default function FinanzasPage() {
       const m = subMonths(new Date(), 5 - i)
       const ms = startOfMonth(m); const me = endOfMonth(m)
       const inM = (d: string) => { try { return isWithinInterval(parseISO(d), { start: ms, end: me }) } catch { return false } }
+      const filteredIncomes = includeVirtual ? incomes : incomes.filter(x => !x.is_virtual)
+      const filteredExpenses = includeVirtual ? expenses : expenses.filter(x => !isVirtual(x))
       return {
         label: format(m, 'MMM', { locale: es }),
-        income: incomes.filter(i => inM(i.income_date)).reduce((s, i) => s + (i.amount ?? 0), 0),
-        expense: expenses.filter(e => inM(e.expense_date)).reduce((s, e) => s + (e.amount ?? 0), 0),
+        income: filteredIncomes.filter(x => inM(x.income_date)).reduce((s, x) => s + (x.amount ?? 0), 0),
+        expense: filteredExpenses.filter(x => inM(x.expense_date)).reduce((s, x) => s + (x.amount ?? 0), 0),
       }
     })
-  }, [incomes, expenses])
+  }, [incomes, expenses, includeVirtual]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const maxCashFlow = useMemo(() => Math.max(...cashFlow.map(m => Math.max(m.income, m.expense)), 1), [cashFlow])
 
@@ -222,22 +226,46 @@ export default function FinanzasPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-display-sm font-extrabold text-on-surface" style={{ letterSpacing: '-0.03em' }}>Finanzas</h1>
           <p className="text-label-md text-on-surface-variant mt-1">Sincronizado con FinWise</p>
         </div>
-        {/* Month selector */}
-        <div className="flex items-center gap-1 bg-surface border border-outline-variant rounded-xl p-1">
-          <button onClick={() => setSelectedMonth(d => subMonths(d, 1))} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors">
-            <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Virtual toggle */}
+          <button
+            onClick={() => setIncludeVirtual(v => !v)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-label-sm font-semibold transition-all ${
+              includeVirtual
+                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                : 'bg-surface border-outline-variant text-on-surface-variant hover:border-amber-300 hover:text-amber-600'
+            }`}
+          >
+            <div className={`w-8 h-4 rounded-full relative transition-colors ${includeVirtual ? 'bg-amber-400' : 'bg-outline-variant'}`}>
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${includeVirtual ? 'left-4' : 'left-0.5'}`} />
+            </div>
+            <span className="material-symbols-outlined text-[15px]">swap_horiz</span>
+            Virtuales
           </button>
-          <span className="text-label-md font-semibold text-on-surface px-2 capitalize min-w-[88px] text-center">{fmtMonth(selectedMonth)}</span>
-          <button onClick={() => setSelectedMonth(d => addMonths(d, 1))} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors">
-            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-          </button>
+          {/* Month selector */}
+          <div className="flex items-center gap-1 bg-surface border border-outline-variant rounded-xl p-1">
+            <button onClick={() => setSelectedMonth(d => subMonths(d, 1))} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+            </button>
+            <span className="text-label-md font-semibold text-on-surface px-2 capitalize min-w-[88px] text-center">{fmtMonth(selectedMonth)}</span>
+            <button onClick={() => setSelectedMonth(d => addMonths(d, 1))} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+            </button>
+          </div>
         </div>
       </div>
+      {/* Virtual notice */}
+      {!includeVirtual && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-container border border-outline-variant text-label-sm text-on-surface-variant">
+          <span className="material-symbols-outlined text-[15px] text-amber-500">info</span>
+          Gastos e ingresos virtuales excluidos de los cálculos
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
