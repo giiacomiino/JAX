@@ -2,16 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&display=swap');
 
 @layer base {
   * {
     @apply border-outline-variant;
   }
   body {
-    font-family: 'Geist', sans-serif;
+    font-family: 'DM Sans', sans-serif;
     background-color: #fcf8fb;
     color: #1b1b1d;
+  }
+  h1, h2, h3, .font-display, .font-headline {
+    font-family: 'Space Grotesk', sans-serif;
   }
 }
 

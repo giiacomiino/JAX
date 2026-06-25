@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient as createClient } from '@/lib/supabase/admin'
 import { getPrices } from '@/lib/yahoo-finance'
 import { sendMessage, bold } from '@/lib/telegram'
 

@@ -28,47 +28,55 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md bg-surface-container-lowest rounded-2xl border border-outline-variant shadow-sm p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-display-lg font-bold text-primary">JAX</h1>
-          <p className="text-on-surface-variant text-label-md mt-1">Life OS Personal</p>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-10">
+          <h1 className="font-display text-[56px] font-bold text-primary leading-none tracking-tight">JAX</h1>
+          <p className="text-on-surface-variant text-body-md mt-2">Tu Life OS personal</p>
         </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-label-md text-on-surface-variant mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-label-md text-on-surface-variant mb-1">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 rounded-xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-            />
-          </div>
-          {error && <p className="text-error text-label-md">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary text-on-primary py-3 rounded-xl text-label-md font-bold hover:scale-[1.02] active:scale-95 transition-transform disabled:opacity-60"
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
+
+        <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant zen-shadow p-8 space-y-5">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-label-sm text-on-surface-variant font-medium block">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-2xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                placeholder="tu@email.com"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-label-sm text-on-surface-variant font-medium block">Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-2xl bg-surface-container border border-outline-variant text-on-surface text-body-md focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-error/10 border border-error/20">
+                <span className="material-symbols-outlined text-[16px] text-error">error</span>
+                <p className="text-label-sm text-error">{error}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3.5 rounded-2xl text-label-md font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading && <span className="material-symbols-outlined text-[16px]">progress_activity</span>}
+              {loading ? 'Entrando...' : 'Entrar'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )

@@ -69,7 +69,8 @@ const config: Config = {
         full: '9999px',
       },
       fontFamily: {
-        sans: ['Geist', 'Inter', 'sans-serif'],
+        sans: ['DM Sans', 'sans-serif'],
+        display: ['Space Grotesk', 'sans-serif'],
       },
       fontSize: {
         'label-sm': ['12px', { lineHeight: '1.4', letterSpacing: '0.05em', fontWeight: '600' }],
