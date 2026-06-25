@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { PositionForm } from './position-form'
 import type { PositionWithPrice, CreatePositionInput } from '@/types'
+
+const REFRESH_INTERVAL = 60_000 // 60 seconds
 
 function fmt(n: number, currency = 'MXN') {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 2 }).format(n)
@@ -16,14 +18,35 @@ export function PositionsTable() {
   const [positions, setPositions] = useState<PositionWithPrice[]>([])
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [secondsAgo, setSecondsAgo] = useState(0)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchPositions = useCallback(async () => {
+  const fetchPositions = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    else setRefreshing(true)
     const res = await fetch('/api/portfolio')
-    if (res.ok) setPositions(await res.json())
+    if (res.ok) {
+      setPositions(await res.json())
+      setLastUpdated(new Date())
+      setSecondsAgo(0)
+    }
     setLoading(false)
+    setRefreshing(false)
   }, [])
 
-  useEffect(() => { fetchPositions() }, [fetchPositions])
+  useEffect(() => {
+    fetchPositions()
+    intervalRef.current = setInterval(() => fetchPositions(true), REFRESH_INTERVAL)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [fetchPositions])
+
+  // Seconds counter
+  useEffect(() => {
+    const tick = setInterval(() => setSecondsAgo(s => s + 1), 1000)
+    return () => clearInterval(tick)
+  }, [lastUpdated])
 
   async function handleCreate(data: CreatePositionInput) {
     const res = await fetch('/api/portfolio', {
@@ -56,13 +79,30 @@ export function PositionsTable() {
             {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)} total P&L
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-xl text-label-md font-semibold hover:opacity-90 transition-opacity"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Agregar
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            {lastUpdated && (
+              <p className="text-label-sm text-on-surface-variant">
+                {secondsAgo < 60 ? `hace ${secondsAgo}s` : `hace ${Math.floor(secondsAgo / 60)}min`}
+              </p>
+            )}
+            <button
+              onClick={() => fetchPositions(true)}
+              disabled={refreshing}
+              className="flex items-center gap-1 text-label-sm text-primary hover:opacity-70 transition-opacity disabled:opacity-40"
+            >
+              <span className={`material-symbols-outlined text-[14px] ${refreshing ? 'animate-spin' : ''}`}>refresh</span>
+              {refreshing ? 'Actualizando...' : 'Actualizar'}
+            </button>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-xl text-label-md font-semibold hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Agregar
+          </button>
+        </div>
       </div>
 
       {showForm && <PositionForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />}
