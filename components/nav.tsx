@@ -55,14 +55,6 @@ export function Nav() {
 
         <button
           onClick={handleLogout}
-          className="w-full bg-primary text-on-primary py-3 rounded-xl text-label-md font-bold flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-transform"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Quick Add
-        </button>
-
-        <button
-          onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-colors"
         >
           <span className="material-symbols-outlined text-[18px]">logout</span>
