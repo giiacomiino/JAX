@@ -214,7 +214,7 @@ export default function PillarDetailPage() {
         {/* Proyectos activos */}
         {activeProjects.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeProjects.map(p => <ProjectCard key={p.id} project={p} pillarColor={pillar.color} />)}
+            {activeProjects.map(p => <ProjectCard key={p.id} project={p} />)}
           </div>
         )}
 
@@ -223,7 +223,7 @@ export default function PillarDetailPage() {
           <div className="space-y-3 pt-2">
             <p className="text-label-sm text-on-surface-variant font-medium uppercase tracking-wide">Pausados / Completados</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {otherProjects.map(p => <ProjectCard key={p.id} project={p} pillarColor={pillar.color} />)}
+              {otherProjects.map(p => <ProjectCard key={p.id} project={p} />)}
             </div>
           </div>
         )}
@@ -252,7 +252,7 @@ export default function PillarDetailPage() {
   )
 }
 
-function ProjectCard({ project: p, pillarColor }: { project: ProjectWithStats; pillarColor: string }) {
+function ProjectCard({ project: p }: { project: ProjectWithStats }) {
   return (
     <Link href={`/projects/${p.id}`}
       className="block bg-surface rounded-2xl border border-outline-variant p-5 zen-shadow hover:shadow-md hover:-translate-y-0.5 transition-all group">
