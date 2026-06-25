@@ -10,7 +10,7 @@ interface CreditCard {
   credit_limit: number; minimum_payment: number; payment_due_date: number
   cutoff_date: number; status: string; payment_no_interest: number
 }
-interface Account { id: string; account_name: string; account_type: string; current_balance: number }
+interface Account { id: string; account_name: string; account_type: string; current_balance: number; currency?: string }
 interface PaymentSchedule {
   id: string; related_name: string; payment_amount: number; scheduled_date: string
   status: string; payment_type: string; is_recurring: boolean
@@ -18,8 +18,9 @@ interface PaymentSchedule {
 interface Expense {
   id: string; notes: string; amount: number; expense_date: string
   payment_method: string; accounting_month: string
+  category?: string; expense_category?: string; is_virtual?: boolean; expense_type?: string
 }
-interface Income { id: string; income_name: string; amount: number; income_date: string; is_recurring: boolean }
+interface Income { id: string; income_name: string; amount: number; income_date: string; is_recurring: boolean; is_virtual?: boolean }
 interface Debt {
   id: string; debt_name: string; total_balance: number; monthly_payment: number
   payment_day: number; debt_type: string; interest_rate: number
@@ -122,11 +123,27 @@ export default function FinanzasPage() {
   const debts = useMemo(() => data?.Debt ?? [], [data])
   const goals = useMemo(() => data?.SavingsGoal ?? [], [data])
 
-  // KPIs
-  const totalCash = useMemo(() => accounts.reduce((s, a) => s + (a.current_balance ?? 0), 0), [accounts])
+  // KPIs — liquidez = solo cuentas de débito (no ahorro, no efectivo)
+  const debitAccounts = useMemo(() =>
+    accounts.filter(a => {
+      const t = (a.account_type ?? '').toLowerCase()
+      return t.includes('debit') || t.includes('débito') || t.includes('checking') || t === 'debit'
+    }), [accounts])
+  const totalCash = useMemo(() => debitAccounts.reduce((s, a) => s + (a.current_balance ?? 0), 0), [debitAccounts])
+  const totalSavings = useMemo(() => accounts.filter(a => {
+    const t = (a.account_type ?? '').toLowerCase()
+    return t.includes('saving') || t.includes('ahorro')
+  }).reduce((s, a) => s + (a.current_balance ?? 0), 0), [accounts])
   const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + (c.current_balance ?? 0), 0), [cards])
   const totalDebt = useMemo(() => debts.reduce((s, d) => s + (d.total_balance ?? 0), 0), [debts])
   const netBalance = totalCash - totalCardDebt
+
+  // Virtual expense helpers
+  const isVirtual = (e: Expense) =>
+    e.is_virtual === true ||
+    (e.expense_type ?? '').toLowerCase().includes('virtual') ||
+    (e.category ?? '').toLowerCase().includes('virtual') ||
+    (e.expense_category ?? '').toLowerCase().includes('virtual')
 
   // Monthly filter
   const monthStart = startOfMonth(selectedMonth)
@@ -224,20 +241,35 @@ export default function FinanzasPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { icon: 'account_balance_wallet', label: 'Liquidez', value: fmt(totalCash), color: '#059669', bg: '#05966915' },
-          { icon: 'credit_card', label: 'Deuda tarjetas', value: fmt(totalCardDebt), color: '#dc2626', bg: '#dc262615' },
-          { icon: 'balance', label: 'Balance neto', value: fmt(netBalance), color: netBalance >= 0 ? '#0058bc' : '#dc2626', bg: netBalance >= 0 ? '#0058bc15' : '#dc262615' },
-          { icon: 'payments', label: 'Pagos pendientes', value: fmt(pendingTotal), color: '#d97706', bg: '#d9770615' },
-        ].map(s => (
-          <div key={s.label} className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: s.bg }}>
-              <span className="material-symbols-outlined text-[18px]" style={{ color: s.color }}>{s.icon}</span>
-            </div>
-            <p className="font-display font-extrabold text-title-lg" style={{ color: s.color }}>{s.value}</p>
-            <p className="text-label-sm text-on-surface-variant mt-0.5">{s.label}</p>
+        <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-3 bg-green-50">
+            <span className="material-symbols-outlined text-[18px] text-green-600">account_balance_wallet</span>
           </div>
-        ))}
+          <p className="font-display font-extrabold text-title-lg text-green-600">{fmt(totalCash)}</p>
+          <p className="text-label-sm text-on-surface-variant mt-0.5">Liquidez (débito)</p>
+          {totalSavings > 0 && <p className="text-label-sm text-on-surface-variant/60 mt-0.5">+{fmt(totalSavings)} ahorros</p>}
+        </div>
+        <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-3 bg-red-50">
+            <span className="material-symbols-outlined text-[18px] text-red-600">credit_card</span>
+          </div>
+          <p className="font-display font-extrabold text-title-lg text-red-600">{fmt(totalCardDebt)}</p>
+          <p className="text-label-sm text-on-surface-variant mt-0.5">Deuda tarjetas</p>
+        </div>
+        <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: netBalance >= 0 ? '#0058bc15' : '#dc262615' }}>
+            <span className="material-symbols-outlined text-[18px]" style={{ color: netBalance >= 0 ? '#0058bc' : '#dc2626' }}>balance</span>
+          </div>
+          <p className="font-display font-extrabold text-title-lg" style={{ color: netBalance >= 0 ? '#0058bc' : '#dc2626' }}>{fmt(netBalance)}</p>
+          <p className="text-label-sm text-on-surface-variant mt-0.5">Balance neto</p>
+        </div>
+        <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-3 bg-amber-50">
+            <span className="material-symbols-outlined text-[18px] text-amber-600">payments</span>
+          </div>
+          <p className="font-display font-extrabold text-title-lg text-amber-600">{fmt(pendingTotal)}</p>
+          <p className="text-label-sm text-on-surface-variant mt-0.5">Pagos pendientes</p>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -300,15 +332,27 @@ export default function FinanzasPage() {
             <div className="bg-surface rounded-2xl border border-outline-variant p-5 zen-shadow">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wide mb-4">Top gastos del mes</p>
               <div className="space-y-2">
-                {[...monthExpenses].sort((a, b) => b.amount - a.amount).slice(0, 8).map(e => (
-                  <div key={e.id} className="flex items-center justify-between p-3 bg-surface-container rounded-xl">
-                    <div>
-                      <p className="text-label-md text-on-surface">{e.notes || 'Gasto'}</p>
-                      <p className="text-label-sm text-on-surface-variant">{e.expense_date} {e.payment_method ? '· ' + e.payment_method : ''}</p>
+                {[...monthExpenses].sort((a, b) => b.amount - a.amount).slice(0, 8).map(e => {
+                  const virtual = isVirtual(e)
+                  const cat = e.category || e.expense_category || e.payment_method || ''
+                  return (
+                    <div key={e.id} className={`flex items-center justify-between p-3 rounded-xl ${virtual ? 'bg-amber-50 border border-amber-100' : 'bg-surface-container'}`}>
+                      <div className="flex items-center gap-2">
+                        {virtual && <span className="material-symbols-outlined text-[14px] text-amber-500">swap_horiz</span>}
+                        <div>
+                          <p className="text-label-md text-on-surface">{e.notes || 'Gasto'}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {cat && <span className="text-label-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">{cat}</span>}
+                            <span className="text-label-sm text-on-surface-variant">{e.expense_date}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className={`text-label-md font-bold ${virtual ? 'text-amber-600' : 'text-error'}`}>
+                        {virtual ? '±' : '-'}{fmt(e.amount)}
+                      </p>
                     </div>
-                    <p className="text-label-md font-bold text-error">{fmt(e.amount)}</p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -515,16 +559,22 @@ export default function FinanzasPage() {
               </div>
               {monthIncomes.length === 0 ? <p className="text-label-sm text-on-surface-variant">Sin ingresos este mes</p> : (
                 <div className="space-y-2">
-                  {monthIncomes.map(i => (
-                    <div key={i.id} className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                        <p className="text-label-md text-on-surface">{i.income_name || 'Ingreso'}</p>
-                        {i.is_recurring && <span className="material-symbols-outlined text-[12px] text-on-surface-variant">repeat</span>}
+                  {monthIncomes.map(i => {
+                    const virtual = i.is_virtual === true
+                    return (
+                      <div key={i.id} className={`flex justify-between items-center p-2 rounded-xl ${virtual ? 'bg-amber-50' : ''}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${virtual ? 'bg-amber-500' : 'bg-green-500'}`} />
+                          <p className="text-label-md text-on-surface">{i.income_name || 'Ingreso'}</p>
+                          {i.is_recurring && <span className="material-symbols-outlined text-[12px] text-on-surface-variant">repeat</span>}
+                          {virtual && <span className="text-label-sm text-amber-600 font-medium">Virtual</span>}
+                        </div>
+                        <p className={`text-label-md font-semibold ${virtual ? 'text-amber-600' : 'text-green-600'}`}>
+                          {virtual ? '±' : '+'}{fmt(i.amount)}
+                        </p>
                       </div>
-                      <p className="text-label-md font-semibold text-green-600">{fmt(i.amount)}</p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -546,15 +596,25 @@ export default function FinanzasPage() {
             <div className="bg-surface rounded-2xl border border-outline-variant p-5 zen-shadow">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wide mb-4">Todos los gastos — {fmtMonth(selectedMonth)}</p>
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {[...monthExpenses].sort((a, b) => (b.expense_date ?? '').localeCompare(a.expense_date ?? '')).map(e => (
-                  <div key={e.id} className="flex items-center justify-between p-3 bg-surface-container rounded-xl">
-                    <div>
-                      <p className="text-label-md text-on-surface">{e.notes || 'Gasto'}</p>
-                      <p className="text-label-sm text-on-surface-variant">{e.expense_date} {e.payment_method ? '· ' + e.payment_method : ''}</p>
+                {[...monthExpenses].sort((a, b) => (b.expense_date ?? '').localeCompare(a.expense_date ?? '')).map(e => {
+                  const virtual = isVirtual(e)
+                  const cat = e.category || e.expense_category || e.payment_method || ''
+                  return (
+                    <div key={e.id} className={`flex items-center justify-between p-3 rounded-xl ${virtual ? 'bg-amber-50 border border-amber-100' : 'bg-surface-container'}`}>
+                      <div>
+                        <p className="text-label-md text-on-surface">{e.notes || 'Gasto'}</p>
+                        <div className="flex gap-1.5 mt-0.5 flex-wrap">
+                          {cat && <span className="text-label-sm px-1.5 py-0.5 rounded bg-white/70 text-on-surface-variant border border-outline-variant">{cat}</span>}
+                          <span className="text-label-sm text-on-surface-variant">{e.expense_date}</span>
+                          {virtual && <span className="text-label-sm text-amber-600 font-medium">Virtual</span>}
+                        </div>
+                      </div>
+                      <p className={`text-label-md font-bold ${virtual ? 'text-amber-600' : 'text-error'}`}>
+                        {virtual ? '±' : '-'}{fmt(e.amount)}
+                      </p>
                     </div>
-                    <p className="text-label-md font-bold text-error">{fmt(e.amount)}</p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
