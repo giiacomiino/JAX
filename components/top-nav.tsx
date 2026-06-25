@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { JaxLogo } from '@/components/jax-logo'
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -16,7 +17,10 @@ export function TopNav() {
   return (
     <header className="fixed top-0 w-full z-50 flex justify-between items-center px-4 md:px-gutter h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant">
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="text-headline-md font-extrabold text-primary">Jax</Link>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <JaxLogo size={28} />
+          <span className="text-[20px] font-extrabold text-primary" style={{ letterSpacing: '-0.04em' }}>JAX</span>
+        </Link>
       </div>
       <nav className="hidden md:flex items-center gap-6">
         {navLinks.map(link => (

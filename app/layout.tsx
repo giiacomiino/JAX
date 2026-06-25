@@ -1,8 +1,16 @@
 import type { Metadata } from 'next'
+import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import { Nav } from '@/components/nav'
 import { TopNav } from '@/components/top-nav'
 import { createClient } from '@/lib/supabase/server'
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'JAX — Life OS',
@@ -14,8 +22,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data: { user } } = await supabase.auth.getUser()
 
   return (
-    <html lang="es">
-      <body className="bg-background text-on-surface antialiased">
+    <html lang="es" className={jakarta.variable}>
+      <body className="bg-background text-on-surface antialiased" style={{ fontFamily: 'var(--font-jakarta), sans-serif' }}>
         {user ? (
           <div className="min-h-screen">
             <TopNav />
