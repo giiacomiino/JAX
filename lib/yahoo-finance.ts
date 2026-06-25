@@ -1,9 +1,11 @@
-import yahooFinance from 'yahoo-finance2'
+import YahooFinanceClass from 'yahoo-finance2'
+
+const yf = new YahooFinanceClass({ suppressNotices: ['yahooSurvey'] })
 
 export async function getPrice(ticker: string, market: 'usa' | 'mx'): Promise<number | null> {
   const symbol = market === 'mx' ? `${ticker}.MX` : ticker
   try {
-    const quote = await yahooFinance.quote(symbol)
+    const quote = await yf.quote(symbol, {}, { validateResult: false })
     return (quote as { regularMarketPrice?: number }).regularMarketPrice ?? null
   } catch {
     return null
