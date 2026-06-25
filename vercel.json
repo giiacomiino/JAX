@@ -1,4 +1,5 @@
 {
+  "alias": ["giacomo-jax.vercel.app"],
   "crons": [
     { "path": "/api/cron/morning-digest", "schedule": "0 13 * * *" },
     { "path": "/api/cron/evening-reminders", "schedule": "0 2 * * *" },
