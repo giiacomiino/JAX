@@ -8,17 +8,15 @@ import {
 import { es } from 'date-fns/locale'
 import type { Task, Event, Project } from '@/types'
 
-interface Payment {
-  id: string
-  description: string
-  amount: number
-  scheduled_date: string
-  status: string
+interface ProjectedPayment {
+  id: string; title: string; date: string; amount: number
+  type: 'card_payment' | 'debt_payment' | 'recurring_expense'
+  status: string; color: string
 }
 
 interface CalendarItem {
   id: string
-  type: 'task' | 'event' | 'payment'
+  type: 'task' | 'event' | 'payment' | 'card_payment' | 'debt_payment' | 'recurring_expense'
   title: string
   date: string
   color: string
@@ -37,7 +35,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [tasks, setTasks] = useState<Task[]>([])
   const [events, setEvents] = useState<Event[]>([])
-  const [payments, setPayments] = useState<Payment[]>([])
+  const [projected, setProjected] = useState<ProjectedPayment[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedDay, setSelectedDay] = useState<Date | null>(new Date())
   const [loading, setLoading] = useState(true)
@@ -46,12 +44,12 @@ export default function CalendarPage() {
     Promise.all([
       fetch('/api/tasks').then(r => r.json()),
       fetch('/api/events').then(r => r.json()),
-      fetch('/api/finanzas').then(r => r.json()),
+      fetch('/api/finanzas/projected').then(r => r.json()),
       fetch('/api/projects').then(r => r.json()),
-    ]).then(([t, e, f, p]) => {
+    ]).then(([t, e, proj, p]) => {
       setTasks(Array.isArray(t) ? t : [])
       setEvents(Array.isArray(e) ? e : [])
-      setPayments(Array.isArray(f?.PaymentSchedule) ? f.PaymentSchedule : [])
+      setProjected(Array.isArray(proj) ? proj : [])
       setProjects(Array.isArray(p) ? p : [])
       setLoading(false)
     }).catch(() => setLoading(false))
@@ -77,13 +75,15 @@ export default function CalendarPage() {
       items.push({ id: e.id, type: 'event', title: e.title, date: e.starts_at.split('T')[0], color: TYPE_COLORS.event })
     }
 
-    for (const p of payments) {
-      if (!p.scheduled_date || p.status === 'Paid') continue
-      items.push({ id: p.id, type: 'payment', title: p.description, date: p.scheduled_date.split('T')[0], color: TYPE_COLORS.payment, amount: p.amount })
+    for (const p of projected) {
+      items.push({
+        id: p.id, type: p.type, title: p.title, date: p.date,
+        color: p.color, done: p.status === 'paid', amount: p.amount,
+      })
     }
 
     return items
-  }, [tasks, events, payments, projectColorMap])
+  }, [tasks, events, projected, projectColorMap])
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 })
@@ -141,8 +141,16 @@ export default function CalendarPage() {
           <span className="text-label-sm text-on-surface-variant">Eventos</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TYPE_COLORS.payment }} />
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
           <span className="text-label-sm text-on-surface-variant">Pagos</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-red-600" />
+          <span className="text-label-sm text-on-surface-variant">Tarjetas</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-violet-600" />
+          <span className="text-label-sm text-on-surface-variant">Deudas</span>
         </div>
       </div>
 
