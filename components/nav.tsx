@@ -12,6 +12,7 @@ const navItems = [
   { href: '/finanzas', label: 'Finanzas', icon: 'payments' },
   { href: '/portfolio', label: 'Portfolio', icon: 'trending_up' },
   { href: '/projects', label: 'Proyectos', icon: 'folder' },
+  { href: '/calendar', label: 'Calendario', icon: 'calendar_month' },
 ]
 
 export function Nav() {

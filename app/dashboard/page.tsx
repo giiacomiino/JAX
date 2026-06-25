@@ -2,6 +2,7 @@ import { UrgentTasks } from '@/components/dashboard/urgent-tasks'
 import { UpcomingEvents } from '@/components/dashboard/upcoming-events'
 import { PendingPayments } from '@/components/dashboard/pending-payments'
 import { PortfolioSummary } from '@/components/dashboard/portfolio-summary'
+import { ActiveProjects } from '@/components/dashboard/active-projects'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -29,13 +30,18 @@ export default function DashboardPage() {
           <PortfolioSummary />
         </div>
 
-        {/* Agenda — 6 cols */}
-        <div className="col-span-12 lg:col-span-6">
+        {/* Proyectos activos — 4 cols */}
+        <div className="col-span-12 lg:col-span-4">
+          <ActiveProjects />
+        </div>
+
+        {/* Agenda — 4 cols */}
+        <div className="col-span-12 lg:col-span-4">
           <UpcomingEvents />
         </div>
 
-        {/* Pagos — 6 cols */}
-        <div className="col-span-12 lg:col-span-6">
+        {/* Pagos — 4 cols */}
+        <div className="col-span-12 lg:col-span-4">
           <PendingPayments />
         </div>
       </div>
