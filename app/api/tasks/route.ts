@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body: CreateTaskInput = await request.json()
+  const body: CreateTaskInput & { project_id?: string } = await request.json()
 
   if (!body.title?.trim()) {
     return NextResponse.json({ error: 'El título es requerido' }, { status: 400 })
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       priority: body.priority,
       category: body.category,
       status: 'pending',
+      project_id: body.project_id ?? null,
     })
     .select()
     .single()

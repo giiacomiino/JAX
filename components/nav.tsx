@@ -11,6 +11,7 @@ const navItems = [
   { href: '/agenda', label: 'Agenda', icon: 'calendar_today' },
   { href: '/finanzas', label: 'Finanzas', icon: 'payments' },
   { href: '/portfolio', label: 'Portfolio', icon: 'trending_up' },
+  { href: '/projects', label: 'Proyectos', icon: 'folder' },
 ]
 
 export function Nav() {

@@ -1,3 +1,37 @@
+export type ProjectStatus = 'active' | 'paused' | 'completed'
+
+export interface Project {
+  id: string
+  name: string
+  description: string | null
+  color: string
+  status: ProjectStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateProjectInput {
+  name: string
+  description?: string
+  color?: string
+  status?: ProjectStatus
+}
+
+export interface ProjectFile {
+  id: string
+  project_id: string
+  name: string
+  content: string
+  created_at: string
+}
+
+export interface ProjectWithStats extends Project {
+  total_tasks: number
+  completed_tasks: number
+  pending_tasks: number
+  completion_rate: number
+}
+
 export type Priority = 'high' | 'medium' | 'low'
 export type Category = 'work' | 'personal' | 'finance' | 'other'
 export type TaskStatus = 'pending' | 'completed'
