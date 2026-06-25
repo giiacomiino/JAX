@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import { Nav } from '@/components/nav'
 import { TopNav } from '@/components/top-nav'
+import { SessionGuard } from '@/components/session-guard'
 import { createClient } from '@/lib/supabase/server'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -15,6 +16,7 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'JAX — Life OS',
   description: 'Personal life operating system',
+  icons: { icon: '/icon.svg' },
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="bg-background text-on-surface antialiased" style={{ fontFamily: 'var(--font-jakarta), sans-serif' }}>
         {user ? (
           <div className="min-h-screen">
+            <SessionGuard />
             <TopNav />
             <div className="flex pt-16">
               <Nav />

@@ -18,8 +18,8 @@ export function TopNav() {
     <header className="fixed top-0 w-full z-50 flex justify-between items-center px-4 md:px-gutter h-16 bg-surface/80 backdrop-blur-xl border-b border-outline-variant">
       <div className="flex items-center gap-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <JaxLogo size={28} />
-          <span className="text-[20px] font-extrabold text-primary" style={{ letterSpacing: '-0.04em' }}>JAX</span>
+          <JaxLogo size={38} />
+          <span className="text-[22px] font-extrabold text-primary" style={{ letterSpacing: '-0.04em' }}>JAX</span>
         </Link>
       </div>
       <nav className="hidden md:flex items-center gap-6">
