@@ -1,3 +1,30 @@
+// ─── Pillars ────────────────────────────────────────────────────────────────
+
+export interface Pillar {
+  id: string
+  name: string
+  description: string | null
+  color: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatePillarInput {
+  name: string
+  description?: string
+  color?: string
+}
+
+export interface PillarWithStats extends Pillar {
+  total_projects: number
+  total_tasks: number
+  completed_tasks: number
+  pending_tasks: number
+  completion_rate: number
+}
+
+// ─── Projects ────────────────────────────────────────────────────────────────
+
 export type ProjectStatus = 'active' | 'paused' | 'completed'
 
 export interface Project {
@@ -6,6 +33,7 @@ export interface Project {
   description: string | null
   color: string
   status: ProjectStatus
+  pillar_id: string | null
   created_at: string
   updated_at: string
 }
@@ -15,6 +43,7 @@ export interface CreateProjectInput {
   description?: string
   color?: string
   status?: ProjectStatus
+  pillar_id?: string
 }
 
 export interface ProjectFile {

@@ -6,10 +6,12 @@ import Link from 'next/link'
 import type { Task, ProjectFile, Priority } from '@/types'
 
 interface ProjectDetail {
-  id: string; name: string; description: string | null; color: string; status: string
+  id: string; name: string; description: string | null; color: string; status: string; pillar_id: string | null
   tasks: Task[]; files: ProjectFile[]
   metrics: { total_tasks: number; completed_tasks: number; pending_tasks: number; completion_rate: number; weekly_velocity: number[] }
 }
+
+interface PillarMeta { id: string; name: string; color: string }
 
 const PRIORITY_COLOR: Record<Priority, string> = { high: 'text-red-500', medium: 'text-amber-500', low: 'text-on-surface-variant' }
 const PRIORITY_ICON: Record<Priority, string> = { high: 'priority_high', medium: 'remove', low: 'arrow_downward' }
@@ -92,6 +94,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [project, setProject] = useState<ProjectDetail | null>(null)
+  const [pillar, setPillar] = useState<PillarMeta | null>(null)
   const [tab, setTab] = useState<Tab>('tareas')
   const [loading, setLoading] = useState(true)
   const [newTask, setNewTask] = useState('')
@@ -104,7 +107,17 @@ export default function ProjectDetailPage() {
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/projects/${id}`)
-    if (res.ok) setProject(await res.json())
+    if (res.ok) {
+      const data: ProjectDetail = await res.json()
+      setProject(data)
+      if (data.pillar_id) {
+        const pr = await fetch(`/api/pillars/${data.pillar_id}`)
+        if (pr.ok) {
+          const pd = await pr.json()
+          setPillar({ id: pd.id, name: pd.name, color: pd.color })
+        }
+      }
+    }
     setLoading(false)
   }, [id])
 
@@ -192,7 +205,7 @@ export default function ProjectDetailPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Link href="/projects" className="mt-1 w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors">
+        <Link href={pillar ? `/pillars/${pillar.id}` : '/pillars'} className="mt-1 w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors flex-shrink-0">
           <span className="material-symbols-outlined text-[20px]">arrow_back</span>
         </Link>
         <div className="flex-1">
@@ -201,6 +214,12 @@ export default function ProjectDetailPage() {
               <span className="material-symbols-outlined text-[20px]" style={{ color: project.color }}>folder</span>
             </div>
             <div>
+              {pillar && (
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: pillar.color }} />
+                  <span className="text-label-sm font-semibold" style={{ color: pillar.color }}>{pillar.name}</span>
+                </div>
+              )}
               <h1 className="font-display text-headline-lg font-extrabold text-on-surface" style={{ letterSpacing: '-0.02em' }}>{project.name}</h1>
               {project.description && <p className="text-label-md text-on-surface-variant">{project.description}</p>}
             </div>
