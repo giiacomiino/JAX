@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getFinanzasData } from '@/lib/base44'
+import { getRawEntities } from '@/lib/base44'
 
 export async function GET() {
   try {
-    const data = await getFinanzasData()
+    const data = await getRawEntities()
     return NextResponse.json(data, {
       headers: { 'Cache-Control': 's-maxage=300, stale-while-revalidate=60' },
     })

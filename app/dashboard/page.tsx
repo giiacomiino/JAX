@@ -9,19 +9,35 @@ export default function DashboardPage() {
   const now = new Date()
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-10">
       <div>
-        <h1 className="text-headline-lg font-bold text-on-surface">Buenos días, Giacomo</h1>
-        <p className="text-on-surface-variant text-label-md mt-1 capitalize">
-          {format(now, "EEEE, d 'de' MMMM yyyy", { locale: es })}
+        <h1 className="text-display-lg font-bold text-on-surface mb-2">Jax Overview</h1>
+        <p className="text-body-lg text-on-surface-variant max-w-2xl">
+          Buenos días, Giacomo. Aquí está tu resumen del{' '}
+          <span className="capitalize">{format(now, "EEEE d 'de' MMMM", { locale: es })}</span>.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <UrgentTasks />
-        <UpcomingEvents />
-        <PendingPayments />
-        <PortfolioSummary />
+      <div className="bento-grid">
+        {/* Tareas — 8 cols */}
+        <div className="col-span-12 lg:col-span-8">
+          <UrgentTasks />
+        </div>
+
+        {/* Portfolio — 4 cols */}
+        <div className="col-span-12 lg:col-span-4">
+          <PortfolioSummary />
+        </div>
+
+        {/* Agenda — 6 cols */}
+        <div className="col-span-12 lg:col-span-6">
+          <UpcomingEvents />
+        </div>
+
+        {/* Pagos — 6 cols */}
+        <div className="col-span-12 lg:col-span-6">
+          <PendingPayments />
+        </div>
       </div>
     </div>
   )

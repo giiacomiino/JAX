@@ -57,12 +57,15 @@ const config: Config = {
         gutter: '24px',
         lg: '48px',
         xl: '80px',
+        'margin-mobile': '20px',
+        'margin-desktop': '64px',
       },
       borderRadius: {
         DEFAULT: '0.25rem',
         lg: '0.5rem',
         xl: '0.75rem',
         '2xl': '1rem',
+        '3xl': '1.5rem',
         full: '9999px',
       },
       fontFamily: {

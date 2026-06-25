@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Nav } from '@/components/nav'
+import { TopNav } from '@/components/top-nav'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
@@ -16,9 +17,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="es">
       <body className="bg-background text-on-surface antialiased">
         {user ? (
-          <div className="flex">
-            <Nav />
-            <main className="ml-64 flex-1 p-gutter min-h-screen">{children}</main>
+          <div className="min-h-screen">
+            <TopNav />
+            <div className="flex pt-16">
+              <Nav />
+              <main className="flex-1 md:ml-64 p-margin-mobile md:p-margin-desktop overflow-x-hidden min-h-[calc(100vh-64px)]">
+                {children}
+              </main>
+            </div>
           </div>
         ) : (
           <main>{children}</main>
