@@ -56,14 +56,27 @@ export async function GET(request: Request) {
   const supabase = createAdminClient()
   const expiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000)
 
-  await supabase.from('google_accounts').upsert({
+  const upsertData: Record<string, unknown> = {
     email,
     label: stateData.label,
     color: stateData.color,
     access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token ?? null,
     token_expiry: expiry.toISOString(),
-  }, { onConflict: 'email' })
+  }
+  // refresh_token only comes on first authorization or when prompt=consent
+  // Only include it if present so we don't overwrite a valid existing one
+  if (tokens.refresh_token) {
+    upsertData.refresh_token = tokens.refresh_token
+  }
+
+  const { error: dbError } = await supabase
+    .from('google_accounts')
+    .upsert(upsertData, { onConflict: 'email' })
+
+  if (dbError) {
+    console.error('Google account save error:', dbError)
+    return NextResponse.redirect(`${appUrl}/settings?error=db_${dbError.code}`)
+  }
 
   cookieStore.delete('google_oauth_state')
   return NextResponse.redirect(`${appUrl}/settings?connected=${encodeURIComponent(email)}`)

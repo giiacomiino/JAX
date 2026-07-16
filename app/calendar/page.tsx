@@ -11,22 +11,37 @@ import type { Task, Event, Project } from '@/types'
 
 interface ProjectedPayment {
   id: string; title: string; date: string; amount: number; minimum?: number
-  type: 'card_payment' | 'debt_payment' | 'recurring_expense'
+  type: 'card_payment' | 'debt_payment' | 'recurring_expense' | 'card_cutoff'
   status: string; color: string
 }
 interface GoogleEvent {
   id: string; title: string; date: string; color: string
-  accountLabel: string; accountEmail: string; description?: string; location?: string
+  accountLabel: string; accountEmail: string
+  description?: string; location?: string; meetLink?: string
+  startDateTime?: string; endDateTime?: string; allDay?: boolean
+  attendees?: Array<{ email: string; displayName?: string; responseStatus?: string; self?: boolean }>
+  // GCal mirror fields — needed for CRUD
+  gcalId?: string
+  gcalAccountId?: string
+  gcalCalendarId?: string
 }
 interface RawExpense { id: string; notes: string; amount: number; expense_date: string; payment_method?: string; category?: string; expense_category?: string; is_virtual?: boolean }
 interface RawIncome  { id: string; income_name: string; amount: number; income_date: string; is_virtual?: boolean; is_recurring?: boolean }
 
 interface CalendarItem {
   id: string
-  type: 'task' | 'event' | 'google_event' | 'card_payment' | 'debt_payment' | 'recurring_expense'
+  type: 'task' | 'event' | 'google_event' | 'reminder' | 'card_payment' | 'debt_payment' | 'recurring_expense' | 'card_cutoff'
   title: string; date: string; color: string; done?: boolean; amount?: number; minimum?: number
   projectId?: string; projectName?: string; pillarName?: string
-  accountLabel?: string; description?: string
+  accountLabel?: string; description?: string; location?: string; meetLink?: string
+  startDateTime?: string; endDateTime?: string; allDay?: boolean
+  attendees?: Array<{ email: string; displayName?: string; responseStatus?: string; self?: boolean }>
+  // JAX-only fields for editing
+  startsAt?: string; endsAt?: string | null
+  // GCal mirror fields
+  gcalId?: string
+  gcalAccountId?: string
+  gcalCalendarId?: string
 }
 
 interface PillarMap { [pillarId: string]: { name: string; color: string; projects: { [pid: string]: string } } }
@@ -36,18 +51,283 @@ const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n ?? 0)
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmtTime(iso?: string) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true })
+  } catch { return '' }
+}
+
+function formatAttendees(attendees?: Array<{ email: string; displayName?: string; self?: boolean }>): string | undefined {
+  const others = (attendees ?? []).filter(a => !a.self)
+  if (others.length === 0) return undefined
+  const names = others.slice(0, 2).map(a => a.displayName ?? a.email)
+  const rest = others.length - names.length
+  return rest > 0 ? `${names.join(', ')} +${rest}` : names.join(', ')
+}
+
+const RSVP: Record<string, { label: string; color: string }> = {
+  accepted: { label: 'Confirmado', color: '#059669' },
+  declined: { label: 'Rechazado', color: '#dc2626' },
+  tentative: { label: 'Tentativo', color: '#d97706' },
+  needsAction: { label: 'Sin respuesta', color: '#9ca3af' },
+}
+
+// ─── Event Detail Modal ───────────────────────────────────────────────────────
+function EventDetailModal({ item, onClose }: { item: CalendarItem; onClose: () => void }) {
+  const startStr = fmtTime(item.startDateTime)
+  const endStr = fmtTime(item.endDateTime)
+  const timeLabel = item.allDay ? 'Todo el día' : startStr ? `${startStr}${endStr ? ` – ${endStr}` : ''}` : ''
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative bg-surface rounded-3xl border border-outline-variant zen-shadow w-full max-w-md max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        {/* Header strip */}
+        <div className="h-2 rounded-t-3xl" style={{ backgroundColor: item.color }} />
+        <div className="px-6 pt-4 pb-3 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-label-sm text-on-surface-variant mb-0.5">{item.accountLabel ?? 'Evento JAX'}</p>
+            <h2 className="font-display font-extrabold text-title-lg text-on-surface leading-tight">{item.title}</h2>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container flex-shrink-0 mt-0.5">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <div className="px-6 pb-6 space-y-4">
+          {/* Time */}
+          {timeLabel && (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">schedule</span>
+              <div>
+                <p className="text-label-md text-on-surface">{timeLabel}</p>
+                <p className="text-label-sm text-on-surface-variant">{format(parseISO(item.date), "EEEE d 'de' MMMM yyyy", { locale: es })}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Location */}
+          {item.location && (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">location_on</span>
+              <p className="text-label-md text-on-surface">{item.location}</p>
+            </div>
+          )}
+
+          {/* Meet / Video link */}
+          {item.meetLink && (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[18px] text-primary mt-0.5">videocam</span>
+              <a href={item.meetLink} target="_blank" rel="noopener noreferrer"
+                className="text-label-md text-primary underline underline-offset-2">
+                Unirse a Google Meet
+              </a>
+            </div>
+          )}
+
+          {/* Description */}
+          {item.description && (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">notes</span>
+              <p className="text-label-md text-on-surface whitespace-pre-line">{item.description}</p>
+            </div>
+          )}
+
+          {/* Attendees */}
+          {item.attendees && item.attendees.length > 0 && (
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[18px] text-on-surface-variant mt-0.5">group</span>
+              <div className="flex-1 space-y-1.5">
+                <p className="text-label-sm font-semibold text-on-surface-variant">{item.attendees.length} participante{item.attendees.length !== 1 ? 's' : ''}</p>
+                {item.attendees.map((a, i) => {
+                  const rsvp = RSVP[a.responseStatus ?? 'needsAction']
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                          style={{ backgroundColor: item.color }}>
+                          {(a.displayName ?? a.email).charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          {a.displayName && <p className="text-label-sm text-on-surface truncate">{a.displayName}{a.self ? ' (tú)' : ''}</p>}
+                          <p className="text-label-sm text-on-surface-variant truncate">{a.email}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-medium flex-shrink-0" style={{ color: rsvp.color }}>{rsvp.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Event Edit Modal ─────────────────────────────────────────────────────────
+function EventEditModal({ item, onClose, onSave, onDelete }: {
+  item: CalendarItem
+  onClose: () => void
+  onSave: (updated: CalendarItem) => void
+  onDelete: () => void
+}) {
+  const [title, setTitle] = useState(item.title)
+  const [date, setDate] = useState(item.startsAt ? item.startsAt.split('T')[0] : item.date)
+  const [time, setTime] = useState(() => {
+    const src = item.startsAt ?? item.startDateTime
+    if (!src) return ''
+    try {
+      const d = new Date(src)
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    } catch { return '' }
+  })
+  const [description, setDescription] = useState(item.description ?? '')
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function handleSave() {
+    if (!title.trim()) { setErr('El título es requerido'); return }
+    if (!date) { setErr('La fecha es requerida'); return }
+    setSaving(true); setErr(null)
+    try {
+      let updatedItem: CalendarItem
+      if (item.gcalId && item.gcalAccountId) {
+        // GCal mirror event — update directly in Google Calendar
+        const res = await fetch(`/api/google/events/${item.gcalAccountId}/${item.gcalId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ calendarId: item.gcalCalendarId, title: title.trim(), date, time: time || undefined, description: description || null }),
+        })
+        if (!res.ok) throw new Error()
+        updatedItem = { ...item, title: title.trim(), date, description: description || undefined }
+      } else {
+        // JAX-native event — update in Supabase
+        const starts_at = time ? `${date}T${time}:00` : `${date}T12:00:00`
+        const res = await fetch(`/api/events/${item.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title.trim(), starts_at, description: description || null }),
+        })
+        if (!res.ok) throw new Error()
+        const updated = await res.json()
+        updatedItem = { ...item, title: updated.title, startsAt: updated.starts_at, date: updated.starts_at.split('T')[0], description: updated.description }
+      }
+      onSave(updatedItem)
+    } catch {
+      setErr('Error al guardar. Intenta de nuevo.')
+    } finally { setSaving(false) }
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setDeleting(true)
+    try {
+      if (item.gcalId && item.gcalAccountId) {
+        const calId = item.gcalCalendarId ? `?calendarId=${encodeURIComponent(item.gcalCalendarId)}` : ''
+        await fetch(`/api/google/events/${item.gcalAccountId}/${item.gcalId}${calId}`, { method: 'DELETE' })
+      } else {
+        await fetch(`/api/events/${item.id}`, { method: 'DELETE' })
+      }
+      onDelete()
+    } catch {
+      setErr('Error al eliminar')
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative bg-surface rounded-3xl border border-outline-variant zen-shadow w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-5 pb-4 border-b border-outline-variant flex items-center justify-between">
+          <h2 className="font-display font-extrabold text-title-lg text-on-surface">Editar evento</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          {err && <p className="text-label-sm text-red-600 bg-red-50 p-3 rounded-xl">{err}</p>}
+          <div className="space-y-1.5">
+            <label className="text-label-sm font-semibold text-on-surface-variant">Título</label>
+            <input value={title} onChange={e => setTitle(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container text-body-md focus:outline-none focus:border-primary" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-label-sm font-semibold text-on-surface-variant">Fecha</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full px-3 py-3 rounded-2xl border border-outline-variant bg-surface-container text-body-md focus:outline-none focus:border-primary" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-label-sm font-semibold text-on-surface-variant">Hora</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full px-3 py-3 rounded-2xl border border-outline-variant bg-surface-container text-body-md focus:outline-none focus:border-primary" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-label-sm font-semibold text-on-surface-variant">Descripción</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
+              className="w-full px-4 py-3 rounded-2xl border border-outline-variant bg-surface-container text-body-md focus:outline-none focus:border-primary resize-none" />
+          </div>
+        </div>
+        <div className="px-6 pb-6 flex items-center justify-between gap-3">
+          <button onClick={handleDelete} disabled={deleting}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-label-md font-semibold transition-colors ${
+              confirmDelete ? 'bg-red-600 text-white' : 'text-red-600 border border-red-200 hover:bg-red-50'
+            } disabled:opacity-50`}>
+            <span className={`material-symbols-outlined text-[16px] ${deleting ? 'animate-spin' : ''}`}>
+              {deleting ? 'progress_activity' : 'delete'}
+            </span>
+            {confirmDelete ? 'Confirmar borrar' : 'Eliminar'}
+          </button>
+          <div className="flex gap-2">
+            {confirmDelete && (
+              <button onClick={() => setConfirmDelete(false)}
+                className="px-4 py-2.5 rounded-xl text-label-md text-on-surface-variant border border-outline-variant">
+                Cancelar
+              </button>
+            )}
+            {!confirmDelete && (
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-label-md font-semibold disabled:opacity-50">
+                <span className={`material-symbols-outlined text-[16px] ${saving ? 'animate-spin' : ''}`}>
+                  {saving ? 'progress_activity' : 'check'}
+                </span>
+                Guardar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Day modal ───────────────────────────────────────────────────────────────
-function DayModal({ day, items, expenses, incomes, onClose }: {
+function DayModal({ day, items, expenses, incomes, onClose, onEventSaved, onEventDeleted }: {
   day: Date; items: CalendarItem[]
   expenses: RawExpense[]; incomes: RawIncome[]; onClose: () => void
+  onEventSaved?: (updated: CalendarItem) => void
+  onEventDeleted?: (id: string, gcalId?: string) => void
 }) {
+  const [selectedEvent, setSelectedEvent] = useState<CalendarItem | null>(null)
+  const [editingEvent, setEditingEvent] = useState<CalendarItem | null>(null)
   const dayKey = format(day, 'yyyy-MM-dd')
   const dayExpenses = expenses.filter(e => (e.expense_date ?? '').startsWith(dayKey))
   const dayIncomes = incomes.filter(i => (i.income_date ?? '').startsWith(dayKey))
 
   const taskItems = items.filter(i => i.type === 'task')
   const eventItems = items.filter(i => i.type === 'event' || i.type === 'google_event')
-  const financeItems = items.filter(i => !['task', 'event', 'google_event'].includes(i.type))
+  const reminderItems = items.filter(i => i.type === 'reminder')
+  const cutoffItems = items.filter(i => i.type === 'card_cutoff')
+  const financeItems = items.filter(i => !['task', 'event', 'google_event', 'reminder', 'card_cutoff'].includes(i.type))
 
   // Group tasks by pillar
   const tasksByPillar: Record<string, { pillarName: string; color: string; tasks: CalendarItem[] }> = {}
@@ -61,7 +341,7 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
   const totalExpense = dayExpenses.filter(e => !e.is_virtual).reduce((s, e) => s + (e.amount ?? 0), 0)
   const totalVirtual = [...dayExpenses.filter(e => e.is_virtual), ...dayIncomes.filter(i => i.is_virtual)].reduce((s, x) => s + (x.amount ?? 0), 0)
   const dayBalance = totalIncome - totalExpense
-  const isEmpty = !taskItems.length && !eventItems.length && !financeItems.length && !dayExpenses.length && !dayIncomes.length
+  const isEmpty = !taskItems.length && !eventItems.length && !reminderItems.length && !financeItems.length && !dayExpenses.length && !dayIncomes.length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -120,15 +400,114 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
           {eventItems.length > 0 && (
             <div className="space-y-2">
               <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Eventos</p>
-              {eventItems.map(e => (
-                <div key={e.id} className="flex items-start gap-2 p-3 rounded-xl border" style={{ backgroundColor: e.color + '12', borderColor: e.color + '30' }}>
-                  <span className="material-symbols-outlined text-[15px] mt-0.5" style={{ color: e.color }}>
-                    {e.type === 'google_event' ? 'event_available' : 'event'}
-                  </span>
-                  <div>
-                    <p className="text-label-md text-on-surface">{e.title}</p>
-                    {e.accountLabel && <p className="text-label-sm text-on-surface-variant">{e.accountLabel}</p>}
-                    {e.description && <p className="text-label-sm text-on-surface-variant mt-0.5 line-clamp-2">{e.description}</p>}
+              {eventItems.map(e => {
+                const startStr = fmtTime(e.startDateTime)
+                const endStr = fmtTime(e.endDateTime)
+                const timeLabel = e.allDay ? null : startStr ? `${startStr}${endStr ? ` – ${endStr}` : ''}` : null
+                const hasDetails = !!(e.location || e.meetLink || (e.attendees?.length) || e.description)
+                return (
+                  <div key={e.id} className="rounded-xl border overflow-hidden" style={{ borderColor: e.color + '40' }}>
+                    <div className="flex items-start gap-3 p-3" style={{ backgroundColor: e.color + '10' }}>
+                      <span className="material-symbols-outlined text-[16px] mt-0.5 flex-shrink-0" style={{ color: e.color }}>
+                        {e.type === 'google_event' ? 'event_available' : 'event'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-label-md font-semibold text-on-surface">{e.title}</p>
+                        {e.accountLabel && (
+                          <p className="text-[11px] text-on-surface-variant mt-0.5">{e.accountLabel}</p>
+                        )}
+                        {timeLabel && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="material-symbols-outlined text-[12px]" style={{ color: e.color }}>schedule</span>
+                            <p className="text-[11px] font-medium" style={{ color: e.color }}>{timeLabel}</p>
+                          </div>
+                        )}
+                        {e.location && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="material-symbols-outlined text-[12px] text-on-surface-variant">location_on</span>
+                            <p className="text-[11px] text-on-surface-variant truncate">{e.location}</p>
+                          </div>
+                        )}
+                        {e.meetLink && (
+                          <a href={e.meetLink} target="_blank" rel="noopener noreferrer"
+                            onClick={ev => ev.stopPropagation()}
+                            className="flex items-center gap-1 mt-0.5 w-fit">
+                            <span className="material-symbols-outlined text-[12px] text-primary">videocam</span>
+                            <p className="text-[11px] text-primary">Google Meet</p>
+                          </a>
+                        )}
+                        {e.description && (
+                          <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-2">{e.description}</p>
+                        )}
+                        {formatAttendees(e.attendees) && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="material-symbols-outlined text-[12px] text-on-surface-variant">group</span>
+                            <p className="text-[11px] text-on-surface-variant truncate">
+                              {formatAttendees(e.attendees)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {(e.type === 'event' || (e.type === 'google_event' && e.gcalId)) && (
+                          <button onClick={ev => { ev.stopPropagation(); setEditingEvent(e) }}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-black/10 transition-colors"
+                            title="Editar">
+                            <span className="material-symbols-outlined text-[15px]" style={{ color: e.color }}>edit</span>
+                          </button>
+                        )}
+                        {hasDetails && (
+                          <button onClick={ev => { ev.stopPropagation(); setSelectedEvent(e) }}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-black/10 transition-colors"
+                            title="Ver detalles">
+                            <span className="material-symbols-outlined text-[15px]" style={{ color: e.color }}>open_in_full</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Recordatorios */}
+          {reminderItems.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Recordatorios</p>
+              {reminderItems.map(r => {
+                const timeLabel = r.startDateTime ? fmtTime(r.startDateTime) : null
+                return (
+                  <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl border"
+                    style={{ backgroundColor: '#8b5cf615', borderColor: '#8b5cf630' }}>
+                    <span className="material-symbols-outlined text-[16px] flex-shrink-0" style={{ color: '#8b5cf6', fontVariationSettings: "'FILL' 1" }}>notifications</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-label-md font-semibold text-on-surface">{r.title}</p>
+                      {timeLabel && (
+                        <p className="text-[11px] mt-0.5" style={{ color: '#8b5cf6' }}>{timeLabel}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Cortes de tarjeta */}
+          {cutoffItems.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wider">Corte de tarjeta</p>
+              {cutoffItems.map(p => (
+                <div key={p.id} className="p-3 rounded-xl border border-amber-200 bg-amber-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[15px] text-amber-600">content_cut</span>
+                      <div>
+                        <p className="text-label-md text-on-surface font-semibold">{p.title}</p>
+                        <p className="text-label-sm text-amber-700">Saldo al corte</p>
+                      </div>
+                    </div>
+                    <p className="text-label-md font-bold text-amber-700">{fmt(p.amount ?? 0)}</p>
                   </div>
                 </div>
               ))}
@@ -150,7 +529,7 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
                       <div>
                         <p className="text-label-md text-on-surface">{p.title}</p>
                         <p className="text-label-sm" style={{ color: p.color }}>
-                          {p.type === 'card_payment' ? 'Saldo por corte' : p.type === 'debt_payment' ? 'Pago deuda' : 'Recurrente'}
+                          {p.type === 'card_payment' ? 'Pago tarjeta' : p.type === 'debt_payment' ? 'Pago deuda' : 'Recurrente'}
                         </p>
                       </div>
                     </div>
@@ -222,6 +601,21 @@ function DayModal({ day, items, expenses, incomes, onClose }: {
           )}
         </div>
       </div>
+      {selectedEvent && <EventDetailModal item={selectedEvent} onClose={() => setSelectedEvent(null)} />}
+      {editingEvent && (
+        <EventEditModal
+          item={editingEvent}
+          onClose={() => setEditingEvent(null)}
+          onSave={(updated) => {
+            setEditingEvent(null)
+            onEventSaved?.(updated)
+          }}
+          onDelete={() => {
+            setEditingEvent(null)
+            onEventDeleted?.(editingEvent.id, editingEvent.gcalId)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -236,11 +630,40 @@ export default function CalendarPage() {
   const [pillars, setPillars] = useState<Array<{ id: string; name: string; color: string }>>([])
   const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([])
   const [googleAccounts, setGoogleAccounts] = useState<Array<{ id: string; label: string; color: string; email: string }>>([])
+  const [reminders, setReminders] = useState<Array<{ id: string; title: string; reminder_at: string; is_done: boolean; google_event_id?: string | null }>>([])
   const [rawExpenses, setRawExpenses] = useState<RawExpense[]>([])
   const [rawIncomes, setRawIncomes] = useState<RawIncome[]>([])
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
 
+  function handleEventSaved(updated: CalendarItem) {
+    if (updated.gcalId) {
+      // GCal mirror event — update in local googleEvents state
+      setGoogleEvents(prev => prev.map(e =>
+        e.gcalId === updated.gcalId
+          ? { ...e, title: updated.title, date: updated.date, description: updated.description }
+          : e
+      ))
+    } else {
+      // JAX-native event
+      setEvents(prev => prev.map(e =>
+        e.id === updated.id
+          ? { ...e, title: updated.title, starts_at: updated.startsAt ?? e.starts_at, ends_at: updated.endsAt ?? e.ends_at, description: updated.description ?? null }
+          : e
+      ))
+    }
+  }
+
+  function handleEventDeleted(id: string, gcalId?: string) {
+    if (gcalId) {
+      setGoogleEvents(prev => prev.filter(e => e.gcalId !== gcalId))
+    } else {
+      setEvents(prev => prev.filter(e => e.id !== id))
+    }
+    setSelectedDay(null)
+  }
+
+  // Static data — load once
   useEffect(() => {
     Promise.all([
       fetch('/api/tasks').then(r => r.json()).catch(() => []),
@@ -250,8 +673,8 @@ export default function CalendarPage() {
       fetch('/api/pillars').then(r => r.json()).catch(() => []),
       fetch('/api/finanzas').then(r => r.json()).catch(() => ({})),
       fetch('/api/google/accounts').then(r => r.json()).catch(() => []),
-      fetch('/api/google/events').then(r => r.json()).catch(() => []),
-    ]).then(([t, e, proj, p, pil, fin, gAccounts, gEvents]) => {
+      fetch('/api/reminders').then(r => r.json()).catch(() => []),
+    ]).then(([t, e, proj, p, pil, fin, gAccounts, rem]) => {
       setTasks(Array.isArray(t) ? t : [])
       setEvents(Array.isArray(e) ? e : [])
       setProjected(Array.isArray(proj) ? proj : [])
@@ -260,10 +683,20 @@ export default function CalendarPage() {
       setRawExpenses(Array.isArray(fin?.Expense) ? fin.Expense : [])
       setRawIncomes(Array.isArray(fin?.Income) ? fin.Income : [])
       setGoogleAccounts(Array.isArray(gAccounts) ? gAccounts : [])
-      setGoogleEvents(Array.isArray(gEvents) ? gEvents : [])
+      setReminders(Array.isArray(rem) ? rem : [])
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
+
+  // Google events — re-fetch when month changes
+  useEffect(() => {
+    const timeMin = startOfMonth(currentDate).toISOString()
+    const timeMax = endOfMonth(currentDate).toISOString()
+    fetch(`/api/google/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`)
+      .then(r => r.json())
+      .then(data => setGoogleEvents(Array.isArray(data) ? data : []))
+      .catch(() => setGoogleEvents([]))
+  }, [currentDate])
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map(p => [p.id, p])), [projects])
 
@@ -284,6 +717,7 @@ export default function CalendarPage() {
 
     for (const t of tasks) {
       if (!t.due_date) continue
+      if (t.google_event_id) continue  // already appears via GCal fetch
       const tw = t as Task & { project_id?: string }
       const proj = tw.project_id ? projectMap[tw.project_id] : null
       const pw = proj as (Project & { pillar_id?: string }) | null
@@ -296,14 +730,26 @@ export default function CalendarPage() {
       })
     }
 
-    for (const e of events) {
-      items.push({ id: e.id, type: 'event', title: e.title, date: e.starts_at.split('T')[0], color: LOCAL_EVENT_COLOR })
-    }
-
+    // GCal is the source of truth — show all GCal events directly, fully editable
     for (const g of googleEvents) {
       items.push({
-        id: g.id, type: 'google_event', title: g.title, date: g.date,
-        color: g.color, accountLabel: g.accountLabel, description: g.description,
+        id: g.id, type: 'google_event',
+        gcalId: g.gcalId, gcalAccountId: g.gcalAccountId, gcalCalendarId: g.gcalCalendarId,
+        title: g.title, date: g.date,
+        color: g.color, accountLabel: g.accountLabel,
+        description: g.description, location: g.location, meetLink: g.meetLink,
+        startDateTime: g.startDateTime, endDateTime: g.endDateTime, allDay: g.allDay,
+        attendees: g.attendees,
+      })
+    }
+
+    // Only show JAX-native events that are NOT synced to GCal (no google_event_id)
+    for (const e of events) {
+      if (e.google_event_id) continue  // already appears via GCal fetch
+      items.push({
+        id: e.id, type: 'event', title: e.title, date: e.starts_at.split('T')[0],
+        color: LOCAL_EVENT_COLOR, description: e.description ?? undefined,
+        startsAt: e.starts_at, endsAt: e.ends_at,
       })
     }
 
@@ -314,8 +760,21 @@ export default function CalendarPage() {
       })
     }
 
+    for (const r of reminders) {
+      if (!r.reminder_at || r.is_done) continue
+      if (r.google_event_id) continue  // already appears via GCal fetch
+      const date = r.reminder_at.split('T')[0]
+      if (!date) continue
+      items.push({
+        id: `rem-${r.id}`, type: 'reminder', title: r.title, date,
+        color: '#8b5cf6',
+        startDateTime: r.reminder_at,
+        description: undefined,
+      })
+    }
+
     return items
-  }, [tasks, events, googleEvents, projected, projectMap, pillarMap])
+  }, [tasks, events, googleEvents, projected, projectMap, pillarMap, reminders])
 
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 0 })
@@ -329,20 +788,20 @@ export default function CalendarPage() {
   }, [allItems])
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-display-sm font-extrabold text-on-surface capitalize" style={{ letterSpacing: '-0.03em' }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl sm:text-display-sm font-extrabold text-on-surface capitalize truncate" style={{ letterSpacing: '-0.03em' }}>
             {format(currentDate, 'MMMM yyyy', { locale: es })}
           </h1>
-          <p className="text-label-md text-on-surface-variant mt-1">
-            {allItems.length} eventos
-            {googleAccounts.length > 0 && ` · ${googleAccounts.length} cuenta(s) Google`}
-            {' · '}click en un día para desglose
+          <p className="text-label-sm sm:text-label-md text-on-surface-variant mt-0.5 hidden sm:block">
+            {allItems.length} elementos
+            {googleAccounts.length > 0 && ` · ${googleEvents.length} eventos Google`}
+            {' · '}toca un día para desglose
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           {googleAccounts.length === 0 && (
             <Link href="/settings" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-outline-variant text-label-sm text-on-surface-variant hover:bg-surface-container transition-colors">
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
@@ -364,28 +823,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Leyenda */}
-      <div className="flex flex-wrap gap-3 items-center">
-        {pillars.map(p => (
-          <div key={p.id} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
-            <span className="text-label-sm text-on-surface-variant">{p.name}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: LOCAL_EVENT_COLOR }} /><span className="text-label-sm text-on-surface-variant">Eventos JAX</span></div>
-        {googleAccounts.map(a => (
-          <div key={a.id} className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: a.color }} />
-            <span className="text-label-sm text-on-surface-variant">{a.label}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-600" /><span className="text-label-sm text-on-surface-variant">Tarjetas</span></div>
-        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-violet-600" /><span className="text-label-sm text-on-surface-variant">Deudas</span></div>
-      </div>
-
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Grid */}
-        <div className="flex-1 bg-surface rounded-3xl border border-outline-variant overflow-hidden zen-shadow">
+        <div className="flex-1 bg-surface rounded-2xl sm:rounded-3xl border border-outline-variant overflow-hidden zen-shadow">
           <div className="grid grid-cols-7 border-b border-outline-variant">
             {WEEKDAYS.map(d => (
               <div key={d} className="py-3 text-center text-label-sm font-semibold text-on-surface-variant">{d}</div>
@@ -401,11 +841,11 @@ export default function CalendarPage() {
                 const dayItems = itemsForDay(day)
                 const isCurrentMonth = isSameMonth(day, currentDate)
                 const todayDay = isToday(day)
-                const visible = dayItems.slice(0, 3)
+                const visible = dayItems.slice(0, 2)
                 const overflow = dayItems.length - visible.length
                 return (
                   <button key={idx} onClick={() => setSelectedDay(day)}
-                    className={`min-h-[96px] p-2 border-b border-r border-outline-variant text-left transition-colors hover:bg-primary/5 active:bg-primary/10 ${
+                    className={`min-h-[64px] sm:min-h-[96px] p-1.5 sm:p-2 border-b border-r border-outline-variant text-left transition-colors hover:bg-primary/5 active:bg-primary/10 ${
                       todayDay ? 'bg-secondary-container/30' : isCurrentMonth ? 'bg-surface' : 'bg-surface-container/40'
                     }`}
                   >
@@ -417,11 +857,14 @@ export default function CalendarPage() {
                     <div className="space-y-0.5">
                       {visible.map(item => (
                         <div key={item.id}
-                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight truncate ${item.done ? 'opacity-40' : ''}`}
+                          className={`flex items-center gap-0.5 sm:gap-1 px-1 sm:px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-medium leading-tight truncate ${item.done ? 'opacity-40' : ''}`}
                           style={{ backgroundColor: item.color + '20', color: item.color }}>
-                          {item.type === 'google_event' && <span className="material-symbols-outlined text-[9px]">event_available</span>}
-                          {item.type === 'event' && <span className="material-symbols-outlined text-[9px]">event</span>}
-                          {(item.type === 'card_payment' || item.type === 'debt_payment' || item.type === 'recurring_expense') && <span className="material-symbols-outlined text-[9px]">payments</span>}
+                          {item.type === 'task' && <span className="material-symbols-outlined text-[8px] hidden sm:inline">task_alt</span>}
+                          {item.type === 'google_event' && <span className="material-symbols-outlined text-[8px] hidden sm:inline">event_available</span>}
+                          {item.type === 'event' && <span className="material-symbols-outlined text-[8px] hidden sm:inline">event</span>}
+                          {item.type === 'reminder' && <span className="material-symbols-outlined text-[8px] hidden sm:inline" style={{ fontVariationSettings: "'FILL' 1" }}>notifications</span>}
+                          {item.type === 'card_cutoff' && <span className="material-symbols-outlined text-[8px] hidden sm:inline">content_cut</span>}
+                          {(item.type === 'card_payment' || item.type === 'debt_payment' || item.type === 'recurring_expense') && <span className="material-symbols-outlined text-[8px] hidden sm:inline">payments</span>}
                           <span className="truncate">{item.title}</span>
                         </div>
                       ))}
@@ -435,7 +878,7 @@ export default function CalendarPage() {
         </div>
 
         {/* Panel lateral */}
-        <div className="w-64 flex-shrink-0 space-y-3">
+        <div className="w-full lg:w-64 lg:flex-shrink-0 space-y-3">
           <div className="bg-surface rounded-2xl border border-outline-variant p-4 zen-shadow space-y-3">
             <p className="text-label-sm font-semibold text-on-surface-variant uppercase tracking-wide">Próximos 7 días</p>
             {(() => {
@@ -494,6 +937,8 @@ export default function CalendarPage() {
           expenses={rawExpenses}
           incomes={rawIncomes}
           onClose={() => setSelectedDay(null)}
+          onEventSaved={handleEventSaved}
+          onEventDeleted={handleEventDeleted}
         />
       )}
     </div>

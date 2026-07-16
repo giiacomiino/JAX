@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient as createClient } from '@/lib/supabase/admin'
+import { scheduleInGCal } from '@/lib/auto-gcal'
 import type { CreateEventInput } from '@/types'
 
 export async function GET() {
@@ -14,7 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body: CreateEventInput = await request.json()
+  const body: CreateEventInput & { pillar_id?: string } = await request.json()
 
   if (!body.title?.trim()) {
     return NextResponse.json({ error: 'El título es requerido' }, { status: 400 })
@@ -37,5 +38,18 @@ export async function POST(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-schedule in linked Google Calendar and store the GCal event ID
+  if (body.pillar_id) {
+    const date = body.starts_at.split('T')[0]
+    scheduleInGCal(body.pillar_id, { title: body.title.trim(), date, description: body.description })
+      .then(({ googleEventId, googleAccountId }) => {
+        if (googleEventId) {
+          void supabase.from('events').update({ google_event_id: googleEventId, google_account_id: googleAccountId }).eq('id', data.id)
+        }
+      })
+      .catch(() => {})
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

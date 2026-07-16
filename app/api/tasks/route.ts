@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient as createClient } from '@/lib/supabase/admin'
+import { scheduleInGCal, pillarIdFromProject } from '@/lib/auto-gcal'
 import type { CreateTaskInput } from '@/types'
 
 export async function GET() {
@@ -36,5 +37,13 @@ export async function POST(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-schedule in linked Google Calendar (non-blocking)
+  if (body.due_date && body.project_id) {
+    pillarIdFromProject(body.project_id).then(pillarId =>
+      scheduleInGCal(pillarId, { title: body.title.trim(), date: body.due_date! })
+    ).catch(() => {})
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

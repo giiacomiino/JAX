@@ -30,6 +30,10 @@ yarn-error.log*
 
 # vercel
 .vercel
+.env.vercel.tmp
+
+# supabase CLI local cache
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo

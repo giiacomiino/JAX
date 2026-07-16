@@ -14,6 +14,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       ...(body.is_recurring !== undefined && { is_recurring: body.is_recurring }),
       ...(body.recurrence_pattern !== undefined && { recurrence_pattern: body.recurrence_pattern }),
       ...(body.is_done !== undefined && { is_done: body.is_done }),
+      ...(body.google_event_id !== undefined && { google_event_id: body.google_event_id }),
+      ...(body.google_account_id !== undefined && { google_account_id: body.google_account_id }),
     })
     .eq('id', params.id)
     .select()

@@ -76,6 +76,9 @@ export interface Task {
   category: Category
   status: TaskStatus
   created_at: string
+  updated_at?: string
+  google_event_id?: string | null
+  google_account_id?: string | null
 }
 
 export interface CreateTaskInput {
@@ -94,6 +97,8 @@ export interface Event {
   ends_at: string | null
   reminder_minutes: number
   created_at: string
+  google_event_id?: string | null
+  google_account_id?: string | null
 }
 
 export interface CreateEventInput {
