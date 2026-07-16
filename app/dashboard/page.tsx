@@ -1,53 +1,25 @@
-import { UrgentTasks } from '@/components/dashboard/urgent-tasks'
-import { UpcomingEvents } from '@/components/dashboard/upcoming-events'
-import { PendingPayments } from '@/components/dashboard/pending-payments'
-import { PortfolioSummary } from '@/components/dashboard/portfolio-summary'
-import { ActiveProjects } from '@/components/dashboard/active-projects'
+'use client'
+
+import { useState } from 'react'
+import { MainDashboard } from '@/components/dashboard/main-dashboard'
 import { QuickAdd } from '@/components/dashboard/quick-add'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { Greeting } from '@/components/dashboard/greeting'
 
 export default function DashboardPage() {
-  const now = new Date()
+  const [refreshKey, setRefreshKey] = useState(0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface mb-2">Jax Overview</h1>
-        <p className="text-body-lg text-on-surface-variant max-w-2xl">
-          Buenos días, Giacomo. Aquí está tu resumen del{' '}
-          <span className="capitalize">{format(now, "EEEE d 'de' MMMM", { locale: es })}</span>.
-        </p>
+        <h1 className="font-display text-[18px] sm:text-headline-lg font-bold text-on-surface" style={{ letterSpacing: '-0.025em' }}>
+          Jax Overview
+        </h1>
+        <Greeting />
       </div>
 
-      <QuickAdd />
+      <QuickAdd onCreated={() => setRefreshKey(k => k + 1)} />
 
-      <div className="bento-grid">
-        {/* Tareas — 8 cols */}
-        <div className="col-span-12 lg:col-span-8">
-          <UrgentTasks />
-        </div>
-
-        {/* Portfolio — 4 cols */}
-        <div className="col-span-12 lg:col-span-4">
-          <PortfolioSummary />
-        </div>
-
-        {/* Proyectos activos — 4 cols */}
-        <div className="col-span-12 lg:col-span-4">
-          <ActiveProjects />
-        </div>
-
-        {/* Agenda — 4 cols */}
-        <div className="col-span-12 lg:col-span-4">
-          <UpcomingEvents />
-        </div>
-
-        {/* Pagos — 4 cols */}
-        <div className="col-span-12 lg:col-span-4">
-          <PendingPayments />
-        </div>
-      </div>
+      <MainDashboard refreshKey={refreshKey} />
     </div>
   )
 }

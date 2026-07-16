@@ -37,9 +37,12 @@ export function TopNav() {
           </Link>
         ))}
       </nav>
-      <div className="flex items-center gap-3">
-        <span className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[22px]">notifications</span>
-        <span className="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[22px]">settings</span>
+      <div className="flex items-center gap-2 md:gap-3">
+        <Link href="/settings" className="md:hidden w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:text-primary transition-colors">
+          <span className="material-symbols-outlined text-[22px]">settings</span>
+        </Link>
+        <span className="hidden md:flex material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[22px]">notifications</span>
+        <span className="hidden md:flex material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[22px]">settings</span>
         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
           <span className="text-label-sm font-bold text-primary">G</span>
         </div>

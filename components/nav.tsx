@@ -4,21 +4,20 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { JaxLogo } from '@/components/jax-logo'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { href: '/tasks', label: 'Tareas', icon: 'check_circle' },
-  { href: '/agenda', label: 'Agenda', icon: 'calendar_today' },
-  { href: '/finanzas', label: 'Finanzas', icon: 'payments' },
-  { href: '/portfolio', label: 'Portfolio', icon: 'trending_up' },
-  { href: '/pillars', label: 'Pilares', icon: 'workspaces' },
-  { href: '/calendar', label: 'Calendario', icon: 'calendar_month' },
-  { href: '/settings', label: 'Configuración', icon: 'settings' },
+  { href: '/dashboard', label: 'Dashboard',     icon: 'dashboard' },
+  { href: '/finanzas',  label: 'Finanzas',      icon: 'payments' },
+  { href: '/tasks',     label: 'Tareas',         icon: 'check_circle' },
+  { href: '/pillars',   label: 'Pilares',        icon: 'workspaces' },
+  { href: '/calendar',  label: 'Calendario',    icon: 'calendar_month' },
+  { href: '/settings',  label: 'Configuración', icon: 'settings' },
 ]
 
 export function Nav() {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
   const supabase = createClient()
 
   async function handleLogout() {
@@ -33,30 +32,43 @@ export function Nav() {
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         rel="stylesheet"
       />
-      <aside className="hidden md:flex flex-col h-[calc(100vh-64px)] w-64 fixed left-0 top-16 bg-surface-container-low border-r border-outline-variant p-4 gap-2 z-40">
-        <nav className="space-y-1 flex-1">
+      <aside className="hidden md:flex flex-col h-screen w-56 fixed left-0 top-0 bg-surface border-r border-outline-variant p-3 gap-1.5 z-40">
+        {/* Logo */}
+        <Link href="/dashboard" className="flex items-center gap-2.5 px-1 py-3 mb-2">
+          <JaxLogo size={30} />
+          <span className="text-[20px] font-extrabold text-primary" style={{ letterSpacing: '-0.04em' }}>JAX</span>
+        </Link>
+
+        <nav className="space-y-0.5 flex-1">
           {navItems.map(({ href, label, icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + '/')
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg text-label-md transition-all ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-label-md font-semibold transition-all ${
                   isActive
-                    ? 'bg-secondary-container text-on-secondary-container font-bold translate-x-1'
-                    : 'text-on-surface-variant hover:bg-surface-container-high hover:translate-x-1'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
                 }`}
               >
-                <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                <span
+                  className="material-symbols-outlined text-[20px]"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1, 'wght' 500" : "'FILL' 0, 'wght' 400" }}
+                >
+                  {icon}
+                </span>
                 {label}
               </Link>
             )
           })}
         </nav>
 
+        <div className="h-px bg-outline-variant mx-1 mb-1" />
+
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 text-label-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-colors"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-label-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors"
         >
           <span className="material-symbols-outlined text-[18px]">logout</span>
           Salir
