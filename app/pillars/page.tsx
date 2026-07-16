@@ -73,8 +73,19 @@ function PillarForm({ onSubmit, onCancel }: {
   )
 }
 
-function PillarCard({ pillar: p }: { pillar: PillarWithStats }) {
+function PillarCard({ pillar: p, onColorChange }: { pillar: PillarWithStats; onColorChange: (id: string, color: string) => Promise<void> }) {
   const icon = PILLAR_ICONS.find(i => i.label.toLowerCase() === p.name.toLowerCase())?.icon ?? 'workspaces'
+  const [showColors, setShowColors] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function pickColor(e: React.MouseEvent, color: string) {
+    e.preventDefault(); e.stopPropagation()
+    setSaving(true)
+    await onColorChange(p.id, color)
+    setSaving(false)
+    setShowColors(false)
+  }
+
   return (
     <Link href={`/pillars/${p.id}`}
       className="block bg-surface rounded-2xl border border-outline-variant p-5 zen-shadow hover:shadow-md hover:-translate-y-0.5 transition-all group">
@@ -87,6 +98,27 @@ function PillarCard({ pillar: p }: { pillar: PillarWithStats }) {
             <h3 className="font-display font-extrabold text-body-lg text-on-surface group-hover:text-primary transition-colors">{p.name}</h3>
             {p.description && <p className="text-label-sm text-on-surface-variant line-clamp-1 mt-0.5">{p.description}</p>}
           </div>
+        </div>
+        {/* Color edit button */}
+        <div className="relative" onClick={e => e.preventDefault()}>
+          <button
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setShowColors(v => !v) }}
+            className="w-7 h-7 rounded-full border-2 border-outline-variant hover:scale-110 transition-all flex items-center justify-center"
+            style={{ backgroundColor: p.color }}
+            title="Cambiar color"
+          >
+            {saving && <span className="material-symbols-outlined text-[12px] text-white animate-spin">progress_activity</span>}
+          </button>
+          {showColors && (
+            <div className="absolute right-0 top-9 z-10 bg-surface border border-outline-variant rounded-2xl shadow-xl p-3 flex flex-wrap gap-2 w-[140px]">
+              {PILLAR_COLORS.map(c => (
+                <button key={c} onClick={e => pickColor(e, c)}
+                  className={`w-7 h-7 rounded-full transition-all hover:scale-110 ${p.color === c ? 'ring-2 ring-offset-1 ring-on-surface scale-110' : ''}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -142,6 +174,15 @@ export default function PillarsPage() {
     if (res.ok) { setShowForm(false); load() }
   }
 
+  async function handleColorChange(id: string, color: string) {
+    const res = await fetch(`/api/pillars/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color }),
+    })
+    if (res.ok) {
+      setPillars(prev => prev.map(p => p.id === id ? { ...p, color } : p))
+    }
+  }
+
   const totalPending = pillars.reduce((s, p) => s + p.pending_tasks, 0)
   const totalProjects = pillars.reduce((s, p) => s + p.total_projects, 0)
 
@@ -181,7 +222,7 @@ export default function PillarsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {pillars.map(p => <PillarCard key={p.id} pillar={p} />)}
+          {pillars.map(p => <PillarCard key={p.id} pillar={p} onColorChange={handleColorChange} />)}
         </div>
       )}
     </div>
