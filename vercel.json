@@ -3,6 +3,7 @@
   "crons": [
     { "path": "/api/cron/morning-digest", "schedule": "0 13 * * *" },
     { "path": "/api/cron/evening-reminders", "schedule": "0 2 * * *" },
-    { "path": "/api/cron/check-portfolio", "schedule": "0 15 * * *" }
+    { "path": "/api/cron/check-portfolio", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/sync-base44", "schedule": "0 12 * * *" }
   ]
 }

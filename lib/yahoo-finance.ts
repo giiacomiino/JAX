@@ -2,8 +2,14 @@ import YahooFinanceClass from 'yahoo-finance2'
 
 const yf = new YahooFinanceClass({ suppressNotices: ['yahooSurvey'] })
 
+function buildSymbol(ticker: string, market: 'usa' | 'mx'): string {
+  const clean = ticker.replace(/\s+/g, '')
+  if (market === 'mx') return clean.toUpperCase().endsWith('.MX') ? clean : `${clean}.MX`
+  return clean
+}
+
 export async function getPrice(ticker: string, market: 'usa' | 'mx'): Promise<number | null> {
-  const symbol = market === 'mx' ? `${ticker}.MX` : ticker
+  const symbol = buildSymbol(ticker, market)
   try {
     const quote = await yf.quote(symbol, {}, { validateResult: false })
     return (quote as { regularMarketPrice?: number }).regularMarketPrice ?? null
