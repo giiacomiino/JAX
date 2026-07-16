@@ -23,30 +23,52 @@ export async function GET() {
 
     const projected: Array<{
       id: string; title: string; date: string; amount: number; minimum?: number
-      type: 'card_payment' | 'debt_payment' | 'recurring_expense'
+      type: 'card_payment' | 'debt_payment' | 'recurring_expense' | 'card_cutoff'
       status: string; color: string
     }> = []
 
     const today = startOfDay(new Date())
     const horizon = addMonths(today, 3) // project 3 months ahead
 
-    // Credit card minimum payments — project next 3 months
+    // Credit card cut dates + payment dates — project next 3 months
     for (const card of cards) {
-      if (!card.payment_due_date || !card.current_balance) continue
+      if (!card.current_balance && !card.minimum_payment) continue
+
       for (let m = 0; m < 3; m++) {
         const base = addMonths(today, m)
-        const payDate = new Date(base.getFullYear(), base.getMonth(), card.payment_due_date)
-        if (payDate < today || payDate > horizon) continue
-        projected.push({
-          id: `card-${card.id}-${m}`,
-          title: `💳 ${card.card_alias || card.bank_name}`,
-          date: format(payDate, 'yyyy-MM-dd'),
-          amount: card.current_balance ?? 0,
-          minimum: card.minimum_payment ?? 0,
-          type: 'card_payment',
-          status: 'pending',
-          color: '#dc2626',
-        })
+
+        // Cut date (fecha de corte)
+        if (card.cutoff_date) {
+          const cutDate = new Date(base.getFullYear(), base.getMonth(), card.cutoff_date)
+          if (cutDate >= today && cutDate <= horizon) {
+            projected.push({
+              id: `cut-${card.id}-${m}`,
+              title: `Corte ${card.card_alias || card.bank_name}`,
+              date: format(cutDate, 'yyyy-MM-dd'),
+              amount: card.current_balance ?? 0,
+              type: 'card_cutoff',
+              status: 'pending',
+              color: '#f59e0b',
+            })
+          }
+        }
+
+        // Payment due date
+        if (card.payment_due_date) {
+          const payDate = new Date(base.getFullYear(), base.getMonth(), card.payment_due_date)
+          if (payDate >= today && payDate <= horizon) {
+            projected.push({
+              id: `card-${card.id}-${m}`,
+              title: `Pago ${card.card_alias || card.bank_name}`,
+              date: format(payDate, 'yyyy-MM-dd'),
+              amount: card.current_balance ?? 0,
+              minimum: card.minimum_payment ?? 0,
+              type: 'card_payment',
+              status: 'pending',
+              color: '#dc2626',
+            })
+          }
+        }
       }
     }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, subMonths, addMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { PositionsTable } from '@/components/portfolio/positions-table'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface CreditCard {
@@ -34,7 +35,7 @@ interface FinanzasData {
   Expense: Expense[]; Income: Income[]; Debt: Debt[]; SavingsGoal: SavingsGoal[]
 }
 
-type Tab = 'resumen' | 'tarjetas' | 'pagos' | 'flujo' | 'metas'
+type Tab = 'resumen' | 'tarjetas' | 'pagos' | 'flujo' | 'metas' | 'portfolio'
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -107,14 +108,29 @@ export default function FinanzasPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'paid' | 'recurring'>('all')
   const [includeVirtual, setIncludeVirtual] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastSynced, setLastSynced] = useState<string | null>(null)
 
-  useEffect(() => {
+  function loadData() {
+    setLoading(true)
     fetch('/api/finanzas')
       .then(r => r.ok ? r.json() : Promise.reject('Error al cargar'))
-      .then(setData)
+      .then(d => { setData(d); setLastSynced(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })) })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await fetch('/api/finanzas/refresh', { method: 'POST' })
+      loadData()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const cards = useMemo(() => data?.CreditCard ?? [], [data])
   const accounts = useMemo(() => data?.Account ?? [], [data])
@@ -221,6 +237,7 @@ export default function FinanzasPage() {
     { key: 'pagos', label: 'Pagos', icon: 'schedule' },
     { key: 'flujo', label: 'Flujo', icon: 'show_chart' },
     { key: 'metas', label: 'Metas', icon: 'savings' },
+    { key: 'portfolio', label: 'Portfolio', icon: 'trending_up' },
   ]
 
   return (
@@ -229,9 +246,17 @@ export default function FinanzasPage() {
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-display-sm font-extrabold text-on-surface" style={{ letterSpacing: '-0.03em' }}>Finanzas</h1>
-          <p className="text-label-md text-on-surface-variant mt-1">Sincronizado con FinWise</p>
+          <p className="text-label-md text-on-surface-variant mt-1">
+            Sincronizado con FinWise{lastSynced && <span className="ml-2 text-on-surface-variant/60">· {lastSynced}</span>}
+          </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
+          {/* Refresh button */}
+          <button onClick={handleRefresh} disabled={refreshing || loading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant text-label-sm font-semibold text-on-surface-variant hover:border-primary hover:text-primary disabled:opacity-50 transition-all bg-surface">
+            <span className={`material-symbols-outlined text-[15px] ${refreshing ? 'animate-spin' : ''}`}>sync</span>
+            {refreshing ? 'Actualizando…' : 'Actualizar'}
+          </button>
           {/* Virtual toggle */}
           <button
             onClick={() => setIncludeVirtual(v => !v)}
@@ -752,6 +777,12 @@ export default function FinanzasPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'portfolio' && (
+        <div className="space-y-5">
+          <PositionsTable />
         </div>
       )}
     </div>

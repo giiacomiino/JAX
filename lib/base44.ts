@@ -1,6 +1,9 @@
+import { createAdminClient } from './supabase/admin'
+
 const BASE_URL = 'https://app.base44.com/api'
 const APP_ID = process.env.BASE44_APP_ID!
 const API_KEY = process.env.BASE44_API_KEY!
+const CACHE_TTL_SECONDS = 300
 
 function getAuthHeaders(): Record<string, string> {
   const token = process.env.BASE44_ACCESS_TOKEN
@@ -14,9 +17,8 @@ async function fetchEntity<T extends { created_by_id?: string }>(entity: string)
   const url = token
     ? `${BASE_URL}/apps/${APP_ID}/entities/${entity}`
     : `${BASE_URL}/apps/${APP_ID}/entities/${entity}?api_key=${API_KEY}`
-  const headers = getAuthHeaders()
   try {
-    const res = await fetch(url, { headers, next: { revalidate: 300 } })
+    const res = await fetch(url, { headers: getAuthHeaders(), cache: 'no-store' })
     if (!res.ok) return []
     const json = await res.json()
     const arr: T[] = Array.isArray(json) ? json : []
@@ -26,25 +28,70 @@ async function fetchEntity<T extends { created_by_id?: string }>(entity: string)
   }
 }
 
-const cache: { data: Record<string, unknown[]> | null; fetchedAt: number } = { data: null, fetchedAt: 0 }
-const CACHE_TTL = 300_000
+async function fetchFromBase44(): Promise<Record<string, unknown[]>> {
+  const entities = ['CreditCard', 'Account', 'SavingsGoal', 'Debt', 'Income', 'Expense', 'PaymentSchedule', 'Budget', 'BudgetCategory']
+  const results: Record<string, unknown[]> = {}
+  await Promise.all(entities.map(async e => { results[e] = await fetchEntity(e) }))
+  return results
+}
+
+async function readFromSupabaseCache(): Promise<Record<string, unknown[]> | null> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('finanzas_cache')
+      .select('data, synced_at')
+      .eq('id', 1)
+      .single()
+
+    if (!data) return null
+
+    const ageSeconds = (Date.now() - new Date(data.synced_at).getTime()) / 1000
+    if (ageSeconds > CACHE_TTL_SECONDS) return null
+
+    return data.data as Record<string, unknown[]>
+  } catch {
+    return null
+  }
+}
+
+export async function writeToSupabaseCache(data: Record<string, unknown[]>): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    await supabase.from('finanzas_cache').upsert({ id: 1, data, synced_at: new Date().toISOString() })
+  } catch {
+    // Non-fatal: cache write failure doesn't break the response
+  }
+}
+
+export async function invalidateCache(): Promise<void> {
+  try {
+    const supabase = createAdminClient()
+    await supabase.from('finanzas_cache').delete().eq('id', 1)
+  } catch {
+    // Ignore
+  }
+}
 
 export async function getRawEntities(): Promise<Record<string, unknown[]>> {
-  const now = Date.now()
-  if (cache.data && now - cache.fetchedAt < CACHE_TTL) return cache.data
+  // Try Supabase persistent cache first (shared across all Vercel instances)
+  const cached = await readFromSupabaseCache()
+  if (cached) {
+    // Reject cached data that is all-empty (caused by a previous token failure)
+    const totalCached = Object.values(cached).reduce((s, arr) => s + arr.length, 0)
+    if (totalCached > 0) return cached
+  }
 
-  const entities = ['CreditCard', 'Account', 'SavingsGoal', 'Debt', 'Income', 'Expense', 'PaymentSchedule']
-  const results: Record<string, unknown[]> = {}
+  // Cache miss: fetch fresh from base44
+  const fresh = await fetchFromBase44()
 
-  await Promise.all(
-    entities.map(async e => {
-      results[e] = await fetchEntity(e)
-    })
-  )
+  // Only persist to cache if we actually got data — prevents caching a token failure as zeros
+  const totalFresh = Object.values(fresh).reduce((s, arr) => s + arr.length, 0)
+  if (totalFresh > 0) {
+    await writeToSupabaseCache(fresh)
+  }
 
-  cache.data = results
-  cache.fetchedAt = now
-  return results
+  return fresh
 }
 
 export async function getFinanzasData() {
